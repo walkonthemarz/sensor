@@ -3,6 +3,10 @@ use axum::{
     extract::{Json, State},
     routing::post,
 };
+use axum::http::HeaderMap;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Sqlite, sqlite::SqlitePoolOptions};
 use std::net::SocketAddr;
@@ -29,6 +33,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv().ok(); // Load .env file
     tracing_subscriber::fmt::init();
 
     // Database setup
@@ -81,8 +86,32 @@ async fn main() -> anyhow::Result<()> {
 
 async fn add_reading(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<Reading>,
-) -> Json<serde_json::Value> {
+) -> impl IntoResponse {
+
+    // Validate API key
+    let expected = std::env::var("SENSOR_API_KEY").unwrap_or_default();
+    if expected.is_empty() {
+        eprintln!("SENSOR_API_KEY is not set on the server");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "status": "error", "message": "server misconfigured" })),
+        );
+    }
+
+    let provided = headers
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if provided != expected {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "status": "error", "message": "unauthorized" })),
+        );
+    }
+
     let result = sqlx::query(
         r#"
         INSERT INTO readings (eco2, ech2o, tvoc, pm2_5, pm10, temperature, humidity)
@@ -100,10 +129,16 @@ async fn add_reading(
     .await;
 
     match result {
-        Ok(_) => Json(serde_json::json!({ "status": "success" })),
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "success" })),
+        ),
         Err(e) => {
             eprintln!("Database error: {:?}", e);
-            Json(serde_json::json!({ "status": "error", "message": e.to_string() }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
+            )
         }
     }
 }
