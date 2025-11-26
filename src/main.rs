@@ -78,7 +78,11 @@ async fn main() -> anyhow::Result<()> {
         .nest_service("/", ServeDir::new("assets"))
         .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr_str = format!("{}:{}", host, port);
+    let addr: SocketAddr = addr_str.parse().expect("Invalid address format");
+
     println!("Listening on {}", addr);
 
     // Check for certificates
