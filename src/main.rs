@@ -13,7 +13,6 @@ use sqlx::{FromRow, Pool, Sqlite, sqlite::SqlitePoolOptions};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tower_http::services::ServeDir;
-use tracing_subscriber;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 struct Reading {
