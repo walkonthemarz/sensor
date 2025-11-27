@@ -37,9 +37,6 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -u 1000 appuser
-
 WORKDIR /app
 
 # Copy the binary from builder
@@ -50,10 +47,10 @@ COPY assets /app/assets
 
 # Create directories for data and certs
 RUN mkdir -p /app/data /app/certs && \
-    chown -R appuser:appuser /app
+    chown -R ubuntu:ubuntu /app
 
 # Switch to non-root user
-USER appuser
+USER ubuntu
 
 # Expose port (configurable via environment)
 EXPOSE 3000
