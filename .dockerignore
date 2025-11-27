@@ -1,0 +1,30 @@
+# Build artifacts
+target/
+*.db
+*.db-shm
+*.db-wal
+
+# Git
+.git/
+.github/
+.gitignore
+
+# Environment files
+.env
+.env.*
+env.local
+
+# Certificates (will be mounted as volumes)
+certs/
+*.pem
+*.key
+
+# Documentation
+README.md
+DEPLOYMENT.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
