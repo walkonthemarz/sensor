@@ -105,11 +105,18 @@ chmod 600 certs/key.pem
 mkdir -p data
 ```
 
-### 5. Build and Start the Application
+### 5. Start the Application
 
+First, log in to GitHub Container Registry (you'll need a Personal Access Token with `read:packages` scope):
 ```bash
-# Build the Docker image
-docker compose build
+# Log in to GHCR
+echo $CR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+Then start the application:
+```bash
+# Pull the latest image
+docker compose pull
 
 # Start the service in detached mode
 docker compose up -d
@@ -148,15 +155,18 @@ cargo run -- --port /dev/ttyUSB0 --server-url https://sensor.example.com/api/rea
 
 ## Updating the Application
 
-### Pull Latest Changes
+Since the image is built in CI, you just need to pull the new image:
 
 ```bash
 cd ~/sensor_server
+
+# Pull latest changes (for docker-compose.yml updates)
 git pull origin master
 
-# Rebuild and restart
-docker compose down
-docker compose build
+# Pull the new Docker image
+docker compose pull
+
+# Restart the service
 docker compose up -d
 ```
 
@@ -172,20 +182,17 @@ docker compose logs --tail=100
 
 ## Rollback Procedure
 
-If an update causes issues:
+If an update causes issues, you can revert to a specific image SHA:
 
-```bash
-# Stop current version
-docker compose down
-
-# Checkout previous version
-git log --oneline  # Find the commit hash
-git checkout <previous-commit-hash>
-
-# Rebuild and start
-docker compose build
-docker compose up -d
-```
+1. Find the working SHA from your GitHub Actions logs or GHCR.
+2. Edit `docker-compose.yml` to use that tag:
+   ```yaml
+   image: ghcr.io/YOUR_USERNAME/sensor_server:sha-XXXXXXX
+   ```
+3. Restart:
+   ```bash
+   docker compose up -d
+   ```
 
 ## Database Management
 

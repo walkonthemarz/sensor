@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   sensor-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: sensor-server:latest
+    image: ghcr.io/walkonthemarz/sensor_server:latest
     container_name: sensor-server
     restart: unless-stopped
     
