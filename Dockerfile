@@ -6,18 +6,36 @@ RUN apk add --no-cache \
     build-base \
     musl-dev \
     sqlite-dev \
-    sqlite-static
+    sqlite-static \
+    git
 
 WORKDIR /build
 
 # Copy manifests
 COPY Cargo.toml ./
 
+# Detect architecture and set target
+ARG TARGETARCH
+RUN if [ -z "$TARGETARCH" ]; then \
+    case "$(uname -m)" in \
+    x86_64) TARGETARCH="amd64" ;; \
+    aarch64) TARGETARCH="arm64" ;; \
+    *) echo "Unsupported architecture: $(uname -m)" && exit 1 ;; \
+    esac; \
+    fi && \
+    case "$TARGETARCH" in \
+    "amd64") echo "x86_64-unknown-linux-musl" > /target_triple ;; \
+    "arm64") echo "aarch64-unknown-linux-musl" > /target_triple ;; \
+    *) echo "Unsupported architecture: $TARGETARCH" && exit 1 ;; \
+    esac && \
+    echo "Building for target: $(cat /target_triple)"
+
 # Create a dummy main.rs to build dependencies
 # This layer will be cached unless Cargo.toml changes
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl && \
+    export TARGET=$(cat /target_triple) && \
+    cargo build --release --target "$TARGET" && \
     rm -rf src
 
 # Copy actual source code
@@ -26,7 +44,9 @@ COPY src ./src
 # Build the application
 # Touch main.rs to ensure it's rebuilt
 RUN touch src/main.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl
+    export TARGET=$(cat /target_triple) && \
+    cargo build --release --target "$TARGET" && \
+    cp "target/$TARGET/release/sensor_server" /sensor_server
 
 # Setup stage to prepare users and directories
 FROM alpine:latest AS setup
@@ -48,7 +68,7 @@ COPY --from=setup --chown=10001:10001 /app /app
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder --chown=10001:10001 /build/target/x86_64-unknown-linux-musl/release/sensor_server /app/sensor_server
+COPY --from=builder --chown=10001:10001 /sensor_server /app/sensor_server
 
 # Copy assets directory
 COPY --chown=10001:10001 assets /app/assets
