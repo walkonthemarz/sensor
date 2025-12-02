@@ -19,8 +19,8 @@ The server is configured via environment variables. You can set these in a `.env
 | `HOST` | The interface to bind to | `127.0.0.1` |
 | `PORT` | The port to listen on | `3000` |
 | `SENSOR_API_KEY` | **Required** for `POST` requests. The secret key for authentication. | *None* |
-| `SSL_CERT_PATH` | Path to the SSL certificate file | `cert.pem` |
-| `SSL_KEY_PATH` | Path to the SSL private key file | `key.pem` |
+| `DOMAIN` | Domain for Traefik routing | `sensor.localhost` |
+| `ACME_EMAIL` | Email for Let's Encrypt certificate notifications | *None* |
 
 ## API Endpoints
 
@@ -65,7 +65,6 @@ Retrieve the latest 100 readings.
 
 ### Prerequisites
 -   Rust (latest stable)
--   OpenSSL (for `axum-server` with TLS)
 
 ### Development
 ```bash
@@ -82,7 +81,16 @@ cargo build --release
 
 ## HTTPS Support
 
-To enable HTTPS, place your `cert.pem` and `key.pem` files in the project root (or specify their paths via environment variables). If certificates are found, the server will automatically start in HTTPS mode. Otherwise, it defaults to HTTP.
+HTTPS is handled by the Traefik reverse proxy using Let's Encrypt for automatic certificate management.
+
+### Configuration
+
+1. Set `ACME_EMAIL` in your `.env` file to receive certificate expiration notifications.
+2. Set `DOMAIN` to your actual domain (e.g., `sensor.yourdomain.com`).
+3. Ensure ports 80 and 443 are accessible from the internet for Let's Encrypt validation.
+4. Certificates are automatically obtained and renewed by Traefik.
+
+The server itself listens on HTTP only. Traefik handles TLS termination.
 
 ## TODO
 
@@ -96,3 +104,4 @@ To enable HTTPS, place your `cert.pem` and `key.pem` files in the project root (
 - [ ] Use Terraform/OpenTofu for infrastructure
 - [ ] Add alerting/monitoring for CO2 threshold
 - [ ] Add MD doc linting
+- [ ] Add renovate to upgrade dependencies weekly
