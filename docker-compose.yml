@@ -1,35 +1,60 @@
 version: '3.8'
 
 services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "8080:8080"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
   sensor-server:
     image: ghcr.io/walkonthemarz/sensor_server:latest
     container_name: sensor-server
     restart: unless-stopped
-    
-    ports:
-      - "${PORT:-3000}:3000"
-    
+
+    # ports:
+    #   - "${PORT:-3000}:3000"
+
     environment:
       - HOST=0.0.0.0
       - PORT=3000
       - SENSOR_API_KEY=${SENSOR_API_KEY}
-      - SSL_CERT_PATH=/app/certs/cert.pem
-      - SSL_KEY_PATH=/app/certs/key.pem
-    
+
     volumes:
       # Database persistence
       - ./data:/app/data
-      # SSL certificates
-      - ./certs:/app/certs:ro
-    
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sensor.rule=Host(`${DOMAIN:-sensor.localhost}`)"
+      - "traefik.http.routers.sensor.entrypoints=websecure"
+      - "traefik.http.routers.sensor.tls=true"
+      - "traefik.http.routers.sensor.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sensor.loadbalancer.server.port=3000"
+
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/", "||", "exit", "1"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/", "||", "exit", "1" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    
+
     # Logging configuration
     logging:
       driver: "json-file"

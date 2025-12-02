@@ -6,12 +6,10 @@ use axum::{
     extract::{Json, State},
     routing::post,
 };
-use axum_server::tls_rustls::RustlsConfig;
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Pool, Sqlite, sqlite::SqlitePoolOptions};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use tower_http::services::ServeDir;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -84,26 +82,8 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Listening on {}", addr);
 
-    // Check for certificates
-    let cert_path = std::env::var("SSL_CERT_PATH").unwrap_or_else(|_| "cert.pem".to_string());
-    let key_path = std::env::var("SSL_KEY_PATH").unwrap_or_else(|_| "key.pem".to_string());
-
-    if std::path::Path::new(&cert_path).exists() && std::path::Path::new(&key_path).exists() {
-        println!(
-            "SSL certificates found at {} and {}. Starting in HTTPS mode.",
-            cert_path, key_path
-        );
-        let config =
-            RustlsConfig::from_pem_file(PathBuf::from(cert_path), PathBuf::from(key_path)).await?;
-
-        axum_server::bind_rustls(addr, config)
-            .serve(app.into_make_service())
-            .await?;
-    } else {
-        println!("SSL certificates not found. Starting in HTTP mode.");
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, app).await?;
-    }
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
