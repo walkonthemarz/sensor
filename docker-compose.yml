@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.6.2
     container_name: traefik
     command:
       - "--api.insecure=true"
@@ -41,15 +39,24 @@ services:
 
     labels:
       - "traefik.enable=true"
+      # HTTP router (for Let's Encrypt challenge and redirect)
+      - "traefik.http.routers.sensor-http.rule=Host(`${DOMAIN:-sensor.localhost}`)"
+      - "traefik.http.routers.sensor-http.entrypoints=web"
+      - "traefik.http.routers.sensor-http.middlewares=sensor-https-redirect"
+      # HTTPS router
       - "traefik.http.routers.sensor.rule=Host(`${DOMAIN:-sensor.localhost}`)"
       - "traefik.http.routers.sensor.entrypoints=websecure"
       - "traefik.http.routers.sensor.tls=true"
       - "traefik.http.routers.sensor.tls.certresolver=letsencrypt"
+      # Middleware for redirect
+      - "traefik.http.middlewares.sensor-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.sensor-https-redirect.redirectscheme.permanent=true"
+      # Service
       - "traefik.http.services.sensor.loadbalancer.server.port=3000"
 
     # Health check
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/", "||", "exit", "1" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/" ]
       interval: 30s
       timeout: 10s
       retries: 3

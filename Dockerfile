@@ -48,22 +48,20 @@ RUN touch src/main.rs && \
     cargo build --release --target "$TARGET" && \
     cp "target/$TARGET/release/sensor_server" /sensor_server
 
-# Setup stage to prepare users and directories
-FROM alpine:latest AS setup
-RUN mkdir -p /app/data /app/certs /app/assets
-# Create a non-root user
-RUN adduser -D -H -h /app -u 10001 appuser
-RUN chown -R appuser:appuser /app
-
 # Runtime stage
-FROM scratch
+FROM debian:trixie-slim
 
-# Copy user information
-COPY --from=setup /etc/passwd /etc/passwd
-COPY --from=setup /etc/group /etc/group
+# Install curl for health checks and CA certificates for HTTPS
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy directory structure and permissions
-COPY --from=setup --chown=10001:10001 /app /app
+# Create a non-root user
+RUN useradd -r -u 10001 -d /app appuser && \
+    mkdir -p /app/data /app/certs /app/assets && \
+    chown -R appuser:appuser /app
 
 WORKDIR /app
 
@@ -78,9 +76,7 @@ EXPOSE 3000
 
 # Set default environment variables
 ENV HOST=0.0.0.0 \
-    PORT=3000 \
-    SSL_CERT_PATH=/app/certs/cert.pem \
-    SSL_KEY_PATH=/app/certs/key.pem
+    PORT=3000
 
 # Switch to non-root user
 USER appuser
