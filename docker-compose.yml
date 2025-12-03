@@ -3,7 +3,7 @@ services:
     image: traefik:v3.6.2
     container_name: traefik
     command:
-      - "--api.insecure=true"
+      - "--api=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
@@ -14,11 +14,29 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
     ports:
       - "80:80"
-      - "8080:8080"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
+
+    labels:
+      - "traefik.enable=true"
+      # Dashboard HTTP router (redirect to HTTPS)
+      - "traefik.http.routers.dashboard-http.rule=Host(`${TRAEFIK_DOMAIN:-traefik.localhost}`)"
+      - "traefik.http.routers.dashboard-http.entrypoints=web"
+      - "traefik.http.routers.dashboard-http.middlewares=dashboard-https-redirect"
+      # Dashboard HTTPS router
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DOMAIN:-traefik.localhost}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      # Middleware for HTTPS redirect
+      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.permanent=true"
+      # Middleware for basic auth (replace with your generated hash)
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_AUTH}"
 
   sensor-server:
     image: ghcr.io/walkonthemarz/sensor_server:latest
