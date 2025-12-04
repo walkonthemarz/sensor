@@ -5,7 +5,7 @@ A Rust-based web server built with [Axum](https://github.com/tokio-rs/axum) for 
 ## Features
 
 -   **Data Collection**: Accepts sensor readings (CO2, Temperature, Humidity, PM2.5, etc.) via a REST API.
--   **Data Storage**: Persists data in a SQLite database (`sensor_data.db`).
+-   **Data Storage**: Persists data in a PostgreSQL database.
 -   **API Access**: Provides endpoints to retrieve recent sensor readings.
 -   **Static File Serving**: Serves a frontend dashboard from the `assets` directory.
 -   **Security**: Supports HTTPS (TLS) and API Key authentication for data ingestion.
@@ -21,6 +21,10 @@ The server is configured via environment variables. You can set these in a `.env
 | `SENSOR_API_KEY` | **Required** for `POST` requests. The secret key for authentication. | *None* |
 | `DOMAIN` | Domain for Traefik routing | `sensor.localhost` |
 | `ACME_EMAIL` | Email for Let's Encrypt certificate notifications | *None* |
+| `DATABASE_URL` | PostgreSQL connection string | *None* |
+| `POSTGRES_USER` | PostgreSQL username (Docker only) | `sensor_user` |
+| `POSTGRES_PASSWORD` | PostgreSQL password (Docker only) | *None* |
+| `POSTGRES_DB` | PostgreSQL database name (Docker only) | `sensor_data` |
 
 ## API Endpoints
 
@@ -61,10 +65,44 @@ Retrieve the latest 100 readings.
 ]
 ```
 
+## Database Migrations
+
+This project uses [sqlx-cli](https://github.com/launchbadge/sqlx/tree/main/sqlx-cli) for database migration management.
+
+### Running Migrations
+
+**Local Development:**
+```bash
+# Ensure DATABASE_URL is set in your .env file
+sqlx migrate run
+```
+
+**Docker:**
+Migrations run automatically when the container starts.
+
+### Creating New Migrations
+
+```bash
+# Create a new migration file
+sqlx migrate add <migration_name>
+
+# Example:
+sqlx migrate add add_location_column
+```
+
+### Reverting Migrations
+
+```bash
+# Revert the last migration
+sqlx migrate revert
+```
+
 ## Running the Server
 
 ### Prerequisites
 -   Rust (latest stable)
+-   PostgreSQL (for local development)
+-   sqlx-cli: `cargo install sqlx-cli --no-default-features --features postgres`
 
 ### Development
 ```bash
@@ -95,11 +133,11 @@ The server itself listens on HTTP only. Traefik handles TLS termination.
 ## TODO
 
 - [ ] Add unit tests
-- [ ] Add docker health checks
-- [ ] Add taefik reverse proxy
+- [x] Add docker health checks
+- [x] Add traefik reverse proxy
+- [x] Migrate to Postgres
 - [ ] Optimize UI for chart
 - [ ] Add authentication for UI
-- [ ] Migrate to Postgres
 - [ ] Migrate to K8S
 - [ ] Use Terraform/OpenTofu for infrastructure
 - [ ] Add alerting/monitoring for CO2 threshold

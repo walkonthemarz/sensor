@@ -38,10 +38,32 @@ services:
       # Middleware for basic auth (replace with your generated hash)
       - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_AUTH}"
 
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sensor_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-sensor_data}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sensor_user}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Only expose port for debugging, comment out in production
+    # ports:
+    #   - "5432:5432"
+
   sensor-server:
     image: ghcr.io/walkonthemarz/sensor_server:latest
     container_name: sensor-server
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
     # ports:
     #   - "${PORT:-3000}:3000"
@@ -50,10 +72,7 @@ services:
       - HOST=0.0.0.0
       - PORT=3000
       - SENSOR_API_KEY=${SENSOR_API_KEY}
-
-    volumes:
-      # Database persistence
-      - ./data:/app/data
+      - DATABASE_URL=postgres://${POSTGRES_USER:-sensor_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sensor_data}
 
     labels:
       - "traefik.enable=true"
@@ -86,3 +105,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  postgres_data:
