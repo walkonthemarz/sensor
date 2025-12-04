@@ -8,7 +8,7 @@ use axum::{
 };
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Pool, Sqlite, sqlite::SqlitePoolOptions};
+use sqlx::{FromRow, Pool, Postgres, postgres::PgPoolOptions};
 use std::net::SocketAddr;
 use tower_http::services::ServeDir;
 
@@ -16,18 +16,18 @@ use tower_http::services::ServeDir;
 struct Reading {
     id: Option<i64>,
     timestamp: Option<String>, // ISO8601 string
-    eco2: u16,
-    ech2o: u16,
-    tvoc: u16,
-    pm2_5: u16,
-    pm10: u16,
+    eco2: i16,
+    ech2o: i16,
+    tvoc: i16,
+    pm2_5: i16,
+    pm10: i16,
     temperature: f32,
     humidity: f32,
 }
 
 #[derive(Clone)]
 struct AppState {
-    pool: Pool<Sqlite>,
+    pool: Pool<Postgres>,
 }
 
 #[tokio::main]
@@ -36,36 +36,12 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     // Database setup
-    let database_url = "sqlite:sensor_data.db";
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Create database file if it doesn't exist
-    if !std::path::Path::new("sensor_data.db").exists() {
-        std::fs::File::create("sensor_data.db")?;
-    }
-
-    let pool = SqlitePoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(database_url)
+        .connect(&database_url)
         .await?;
-
-    // Create table
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS readings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            eco2 INTEGER,
-            ech2o INTEGER,
-            tvoc INTEGER,
-            pm2_5 INTEGER,
-            pm10 INTEGER,
-            temperature REAL,
-            humidity REAL
-        )
-        "#,
-    )
-    .execute(&pool)
-    .await?;
 
     let state = AppState { pool };
 
@@ -118,7 +94,7 @@ async fn add_reading(
     let result = sqlx::query(
         r#"
         INSERT INTO readings (eco2, ech2o, tvoc, pm2_5, pm10, temperature, humidity)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         "#,
     )
     .bind(payload.eco2)

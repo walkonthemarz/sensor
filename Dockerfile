@@ -1,13 +1,13 @@
 # Build stage
 FROM rust:alpine AS builder
 
-# Install build dependencies
+# Install build dependencies including sqlx-cli
 RUN apk add --no-cache \
     build-base \
     musl-dev \
-    sqlite-dev \
-    sqlite-static \
-    git
+    postgresql-dev \
+    git && \
+    cargo install sqlx-cli --no-default-features --features postgres
 
 WORKDIR /build
 
@@ -68,8 +68,17 @@ WORKDIR /app
 # Copy the binary from builder
 COPY --from=builder --chown=10001:10001 /sensor_server /app/sensor_server
 
+# Copy sqlx-cli from builder
+COPY --from=builder --chown=10001:10001 /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
+
+# Copy migrations directory
+COPY --chown=10001:10001 migrations /app/migrations
+
 # Copy assets directory
 COPY --chown=10001:10001 assets /app/assets
+
+# Copy entrypoint script
+COPY --chown=10001:10001 docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # Expose port (configurable via environment)
 EXPOSE 3000
@@ -80,6 +89,9 @@ ENV HOST=0.0.0.0 \
 
 # Switch to non-root user
 USER appuser
+
+# Set entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Run the application
 CMD ["/app/sensor_server"]
