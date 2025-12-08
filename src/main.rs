@@ -14,8 +14,9 @@ use tower_http::services::ServeDir;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 struct Reading {
-    id: Option<i64>,
-    timestamp: Option<String>, // ISO8601 string
+    id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp: Option<chrono::NaiveDateTime>,
     eco2: i16,
     ech2o: i16,
     tvoc: i16,
@@ -127,7 +128,10 @@ async fn get_readings(State(state): State<AppState>) -> Json<Vec<Reading>> {
         sqlx::query_as::<_, Reading>("SELECT * FROM readings ORDER BY id DESC LIMIT 100")
             .fetch_all(&state.pool)
             .await
-            .unwrap_or_else(|_| vec![]);
+            .unwrap_or_else(|e| {
+                eprintln!("Error fetching readings: {:?}", e);
+                vec![]
+            });
 
     Json(readings)
 }
