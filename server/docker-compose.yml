@@ -1,0 +1,110 @@
+services:
+  traefik:
+    image: traefik:v3.6.2
+    container_name: traefik
+    command:
+      - "--api=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Let's Encrypt configuration
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
+    labels:
+      - "traefik.enable=true"
+      # Dashboard HTTP router (redirect to HTTPS)
+      - "traefik.http.routers.dashboard-http.rule=Host(`${TRAEFIK_DOMAIN:-traefik.localhost}`)"
+      - "traefik.http.routers.dashboard-http.entrypoints=web"
+      - "traefik.http.routers.dashboard-http.middlewares=dashboard-https-redirect"
+      # Dashboard HTTPS router
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DOMAIN:-traefik.localhost}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      # Middleware for HTTPS redirect
+      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.dashboard-https-redirect.redirectscheme.permanent=true"
+      # Middleware for basic auth (replace with your generated hash)
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_AUTH}"
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sensor_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-sensor_data}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sensor_user} -d ${POSTGRES_DB:-sensor_data}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Only expose port for debugging, comment out in production
+    # ports:
+    #   - "5432:5432"
+
+  sensor-server:
+    image: ghcr.io/walkonthemarz/sensor_server:latest
+    container_name: sensor-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # ports:
+    #   - "${PORT:-3000}:3000"
+
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3000
+      - SENSOR_API_KEY=${SENSOR_API_KEY}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-sensor_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sensor_data}
+
+    labels:
+      - "traefik.enable=true"
+      # HTTP router (for Let's Encrypt challenge and redirect)
+      - "traefik.http.routers.sensor-http.rule=Host(`${DOMAIN:-sensor.localhost}`)"
+      - "traefik.http.routers.sensor-http.entrypoints=web"
+      - "traefik.http.routers.sensor-http.middlewares=sensor-https-redirect"
+      # HTTPS router
+      - "traefik.http.routers.sensor.rule=Host(`${DOMAIN:-sensor.localhost}`)"
+      - "traefik.http.routers.sensor.entrypoints=websecure"
+      - "traefik.http.routers.sensor.tls=true"
+      - "traefik.http.routers.sensor.tls.certresolver=letsencrypt"
+      # Middleware for redirect
+      - "traefik.http.middlewares.sensor-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.sensor-https-redirect.redirectscheme.permanent=true"
+      # Service
+      - "traefik.http.services.sensor.loadbalancer.server.port=3000"
+
+    # Health check
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
