@@ -12,7 +12,7 @@ RUN apk add --no-cache \
 WORKDIR /build
 
 # Copy manifests
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 
 # Detect architecture and set target
 ARG TARGETARCH
@@ -35,7 +35,7 @@ RUN if [ -z "$TARGETARCH" ]; then \
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     export TARGET=$(cat /target_triple) && \
-    cargo build --release --target "$TARGET" && \
+    cargo build --release --locked --target "$TARGET" && \
     rm -rf src
 
 # Copy actual source code
@@ -45,7 +45,7 @@ COPY src ./src
 # Touch main.rs to ensure it's rebuilt
 RUN touch src/main.rs && \
     export TARGET=$(cat /target_triple) && \
-    cargo build --release --target "$TARGET" && \
+    cargo build --release --locked --target "$TARGET" && \
     cp "target/$TARGET/release/sensor_server" /sensor_server
 
 # Runtime stage

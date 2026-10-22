@@ -18,9 +18,7 @@ The server is configured via environment variables. You can set these in a `.env
 | :--- | :--- | :--- |
 | `HOST` | The interface to bind to | `127.0.0.1` |
 | `PORT` | The port to listen on | `3000` |
-| `SENSOR_API_KEY` | **Required** for `POST` requests. The secret key for authentication. | *None* |
-| `DOMAIN` | Domain for Traefik routing | `sensor.localhost` |
-| `ACME_EMAIL` | Email for Let's Encrypt certificate notifications | *None* |
+| `SENSOR_API_KEY` | **Required** for `POST` requests. The shared secret with the client. | *None* |
 | `DATABASE_URL` | PostgreSQL connection string | *None* |
 | `POSTGRES_USER` | PostgreSQL username (Docker only) | `sensor_user` |
 | `POSTGRES_PASSWORD` | PostgreSQL password (Docker only) | *None* |
@@ -117,26 +115,22 @@ cargo build --release
 ./target/release/sensor_server
 ```
 
-## HTTPS Support
+## Deployment
 
-HTTPS is handled by the Traefik reverse proxy using Let's Encrypt for automatic certificate management.
+`docker-compose.yml` runs PostgreSQL, the API, and Caddy as a local reverse proxy.
+Public HTTPS is terminated at the Cloudflare edge by the `sensor.boxcube.xyz`
+tunnel, which forwards to Caddy on `127.0.0.1:8080`. No inbound application
+ports need to be exposed.
 
-### Configuration
-
-1. Set `ACME_EMAIL` in your `.env` file to receive certificate expiration notifications.
-2. Set `DOMAIN` to your actual domain (e.g., `sensor.yourdomain.com`).
-3. Ensure ports 80 and 443 are accessible from the internet for Let's Encrypt validation.
-4. Certificates are automatically obtained and renewed by Traefik.
-
-The server itself listens on HTTP only. Traefik handles TLS termination.
+The full runbook is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## TODO
 
 - [ ] Add unit tests
 - [x] Add docker health checks
-- [x] Add traefik reverse proxy
+- [x] Add reverse proxy (Caddy + Cloudflare Tunnel)
 - [x] Migrate to Postgres
-- [ ] Optimize UI for chart
+- [x] Build the live dashboard
 - [ ] Add authentication for UI
 - [ ] Migrate to K8S
 - [ ] Use Terraform/OpenTofu for infrastructure
