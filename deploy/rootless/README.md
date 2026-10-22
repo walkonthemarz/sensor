@@ -49,11 +49,13 @@ systemctl --user enable --now sensor-postgres sensor-server sensor-caddy
 Caddy listens on `127.0.0.1:8080`; the `sensor-tunnel` service forwards
 `sensor.boxcube.xyz` to it. No sudo and no inbound ports are required.
 
-## Timezone
+## Time
 
-The database and role use `Asia/Shanghai`, matching the client and dashboard:
+Postgres stores UTC. The API returns naive UTC timestamps; the dashboard appends
+`Z` and renders them in the viewer's timezone. Keep the database and role at UTC
+so all rows, the API, and the dashboard agree:
 
 ```sql
-ALTER DATABASE sensor_data SET timezone TO 'Asia/Shanghai';
-ALTER ROLE sensor_user SET timezone TO 'Asia/Shanghai';
+ALTER DATABASE sensor_data SET timezone TO 'UTC';
+ALTER ROLE sensor_user SET timezone TO 'UTC';
 ```
