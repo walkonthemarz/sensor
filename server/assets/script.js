@@ -151,6 +151,8 @@
     if (!value) return null;
     let text = String(value).trim().replace(' ', 'T');
     text = text.replace(/(\.\d{3})\d+/, '$1');
+    // The API returns naive UTC timestamps; make the timezone explicit.
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) text += 'Z';
     const date = new Date(text);
     return Number.isNaN(date.getTime()) ? null : date;
   }
