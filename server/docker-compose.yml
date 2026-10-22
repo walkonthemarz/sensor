@@ -9,6 +9,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sensor_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in server/.env}
       POSTGRES_DB: ${POSTGRES_DB:-sensor_data}
+      TZ: Asia/Shanghai
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +31,7 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 3000
+      TZ: Asia/Shanghai
       SENSOR_API_KEY: ${SENSOR_API_KEY:?Set SENSOR_API_KEY in server/.env}
       DATABASE_URL: postgres://${POSTGRES_USER:-sensor_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sensor_data}
     expose:
@@ -54,6 +57,8 @@ services:
     depends_on:
       sensor-server:
         condition: service_healthy
+    environment:
+      UPSTREAM: sensor-server:3000
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

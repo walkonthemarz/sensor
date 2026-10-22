@@ -1,6 +1,6 @@
 :8080 {
 	encode zstd gzip
-	reverse_proxy sensor-server:3000
+	reverse_proxy {$UPSTREAM:127.0.0.1:3000}
 	header {
 		-Server
 		X-Content-Type-Options nosniff
