@@ -1,0 +1,13 @@
+:8080 {
+	encode zstd gzip
+	reverse_proxy sensor-server:3000
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	log {
+		output stdout
+		format console
+	}
+}

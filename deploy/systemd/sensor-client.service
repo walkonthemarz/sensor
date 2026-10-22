@@ -1,0 +1,15 @@
+[Unit]
+Description=M701 serial sensor reader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/sensor/client
+EnvironmentFile=%h/sensor/client/.env
+ExecStart=%h/sensor/client/target/release/sensor_reader --port /dev/ttyACM0 --server-url https://sensor.boxcube.xyz/api/readings
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

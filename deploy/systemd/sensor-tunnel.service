@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare Tunnel for sensor.boxcube.xyz
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel --config %h/.cloudflared/sensor.yml run sensor
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

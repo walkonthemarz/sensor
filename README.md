@@ -6,6 +6,10 @@ An M701 seven-channel indoor air quality monitor, end to end:
 - **server/** — Axum + PostgreSQL API and the live dashboard
 - **docs/** — M701 frame specification and dashboard preview
 
+**Live dashboard:** <https://sensor.boxcube.xyz>
+
+![M701 dashboard, sample readings](docs/dashboard.png)
+
 ```
 M701 sensor ──USB serial──▶ client ──HTTPS POST──▶ server ──▶ PostgreSQL
                                                      │
@@ -49,6 +53,27 @@ Set `SENSOR_API_KEY` in the environment (or a `.env` file) on both sides.
 reverse proxy. Public HTTPS is terminated by the Cloudflare Tunnel for
 `sensor.boxcube.xyz`; the tunnel forwards to Caddy on `127.0.0.1:8080`.
 See [deploy/README.md](deploy/README.md).
+
+## API
+
+| Method | Path | Auth |
+| :--- | :--- | :--- |
+| `GET` | `/api/readings` | public, latest 100 rows |
+| `POST` | `/api/readings` | `x-api-key` header |
+
+The client posts a 17-byte M701 frame decoded into:
+
+```json
+{
+  "eco2": 731,
+  "ech2o": 89,
+  "tvoc": 235,
+  "pm2_5": 22,
+  "pm10": 27,
+  "temperature": 21.4,
+  "humidity": 41.1
+}
+```
 
 ## Hardware
 
