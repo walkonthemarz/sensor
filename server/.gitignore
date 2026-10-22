@@ -1,0 +1,7 @@
+/target
+/sensor_data.db
+.env
+/certs
+*.pem
+*.key
+.sqlx/
