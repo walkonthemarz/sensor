@@ -9,6 +9,10 @@ Two hosts, one private network path:
 
 Public HTTPS: **https://sensor.boxcube.xyz** via Cloudflare Tunnel.
 
+The live box currently uses the rootless fallback in [rootless/](rootless/README.md)
+because the deploy user cannot access the Docker socket without sudo. The Compose
+stack below is the preferred path once Docker access is granted.
+
 ## 1. Server
 
 ```bash

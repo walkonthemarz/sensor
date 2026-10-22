@@ -1,0 +1,14 @@
+[Unit]
+Description=Caddy local proxy for sensor
+After=sensor-server.service
+Wants=sensor-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/sensor/server
+ExecStart=%h/caddy/caddy run --config %h/sensor/server/Caddyfile --adapter caddyfile
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Sensor API server
+After=sensor-postgres.service
+Wants=sensor-postgres.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/sensor/server
+EnvironmentFile=%h/sensor/server/.env
+ExecStart=%h/sensor/server/target/release/sensor_server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

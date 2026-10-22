@@ -1,0 +1,14 @@
+[Unit]
+Description=User-space PostgreSQL for sensor
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=%h/pgsql/bin/pg_ctl -D %h/pgdata -l %h/pg.log -o "-p 5433 -k /tmp -c listen_addresses=127.0.0.1" start
+ExecStop=%h/pgsql/bin/pg_ctl -D %h/pgdata stop -m fast
+PIDFile=%h/pgdata/postmaster.pid
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

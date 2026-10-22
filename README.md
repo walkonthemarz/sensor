@@ -52,7 +52,9 @@ Set `SENSOR_API_KEY` in the environment (or a `.env` file) on both sides.
 `server/docker-compose.yml` runs PostgreSQL, the API, and Caddy as a local
 reverse proxy. Public HTTPS is terminated by the Cloudflare Tunnel for
 `sensor.boxcube.xyz`; the tunnel forwards to Caddy on `127.0.0.1:8080`.
-See [deploy/README.md](deploy/README.md).
+See [deploy/README.md](deploy/README.md). The current box runs the no-sudo
+fallback documented in [deploy/rootless/README.md](deploy/rootless/README.md);
+the Compose stack is ready to replace it when Docker access is granted.
 
 ## API
 
