@@ -1,6 +1,4 @@
-use axum::http::HeaderMap;
-use axum::http::StatusCode;
-use axum::http::header;
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::{
     Router,
@@ -13,7 +11,9 @@ use sqlx::{FromRow, Pool, Postgres, postgres::PgPoolOptions};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tower::ServiceBuilder;
 use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 /// Global budget for `GET /api/readings`: 120 requests per rolling minute.
 const READ_RATE_LIMIT: f64 = 120.0;
@@ -90,10 +90,19 @@ async fn main() -> anyhow::Result<()> {
         read_limiter: Arc::new(Mutex::new(RateLimiter::new())),
     };
 
+    // Static assets are revalidated on every load so a stale dashboard script
+    // can never outlive a deploy.
+    let assets = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
+        .service(ServeDir::new("assets"));
+
     // Router
     let app = Router::new()
         .route("/api/readings", post(add_reading).get(get_readings))
-        .nest_service("/", ServeDir::new("assets"))
+        .nest_service("/", assets)
         .with_state(state);
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
