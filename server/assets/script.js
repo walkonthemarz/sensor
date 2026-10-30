@@ -19,6 +19,7 @@
   const AIR_KEYS = [
     ['eco2', 'CO₂', 'ppm'],
     ['pm2_5', 'PM2.5', 'µg/m³'],
+    ['pm10', 'PM10', 'µg/m³'],
     ['tvoc', 'TVOC', 'µg/m³'],
     ['ech2o', 'HCHO', 'µg/m³'],
   ];
@@ -26,28 +27,59 @@
   const ADVICE = {
     eco2: ' Open a window or check ventilation.',
     pm2_5: ' Ventilate or filter the air.',
+    pm10: ' Ventilate or filter the air.',
     tvoc: ' Ventilate and check for sources.',
     ech2o: ' Ventilate and check for new materials or finishes.',
   };
 
   const COLOR = {
-    ink: '#1b1f1a',
-    ink2: '#414a3f',
-    muted: '#5f6959',
-    rule: '#d9d3c4',
-    grid: '#e6e1d5',
-    card: '#faf8f2',
-    good: '#2f6b46',
-    warn: '#a8641b',
-    bad: '#a63a2b',
-    temp: '#b25a3c',
-    hum: '#3c6f8c',
-    hcho: '#8a5a44',
-    tvoc: '#b4761f',
-    pm10: '#6f6650',
+    ink: '#2c1d16',
+    ink2: '#523c2f',
+    muted: '#775846',
+    rule: '#efd9c5',
+    grid: '#f2decc',
+    card: '#fffbf6',
+    good: '#3d7a55',
+    warn: '#9a5a06',
+    bad: '#b03a2a',
+    temp: '#de532d',
+    hum: '#3e7fa8',
+    hcho: '#8a5b84',
+    tvoc: '#b8791e',
+    pm10: '#7a6a54',
   };
 
-  const MONO = '"SFMono-Regular", ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+  const FONT = '"Gabarito", "Avenir Next", "Segoe UI", system-ui, sans-serif';
+
+  const RULERS = {
+    eco2: { min: 0, max: 1500, bands: [[0, 800, 'good'], [800, 1200, 'warn'], [1200, 1500, 'bad']] },
+    ech2o: { min: 0, max: 200, bands: [[0, 80, 'good'], [80, 150, 'warn'], [150, 200, 'bad']] },
+    tvoc: { min: 0, max: 800, bands: [[0, 300, 'good'], [300, 600, 'warn'], [600, 800, 'bad']] },
+    pm2_5: { min: 0, max: 55, bands: [[0, 15, 'good'], [15, 35, 'warn'], [35, 55, 'bad']] },
+    pm10: { min: 0, max: 150, bands: [[0, 50, 'good'], [50, 100, 'warn'], [100, 150, 'bad']] },
+    temperature: {
+      min: 10, max: 34,
+      bands: [[10, 18, 'bad'], [18, 20, 'warn'], [20, 26, 'good'], [26, 28, 'warn'], [28, 34, 'bad']],
+    },
+    humidity: {
+      min: 0, max: 100,
+      bands: [[0, 30, 'bad'], [30, 40, 'warn'], [40, 60, 'good'], [60, 70, 'warn'], [70, 100, 'bad']],
+    },
+  };
+
+  const ZONE_COLOR = {
+    good: 'rgba(61, 122, 85, .34)',
+    warn: 'rgba(224, 166, 46, .44)',
+    bad: 'rgba(176, 58, 42, .34)',
+  };
+
+  const VERDICT_TITLES = [
+    'The air feels fresh.',
+    'The air is getting stuffy.',
+    'Time to let some air in.',
+  ];
+
+  const VERDICT_BADGES = ['Fresh air', 'A little stuffy', 'Needs air'];
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -58,10 +90,17 @@
     updatedAt: $('#updatedAt'),
     refreshBtn: $('#refreshBtn'),
     verdict: $('#verdict'),
+    verdictBadgeText: $('#verdictBadgeText'),
+    verdictNote: $('#verdictNote'),
     verdictTitle: $('#verdictTitle'),
     verdictDetail: $('#verdictDetail'),
+    heroPeek: $('#heroPeek'),
+    peekCo2: $('#peekCo2'),
+    peekPm: $('#peekPm'),
+    peekTemp: $('#peekTemp'),
     errorBanner: $('#errorBanner'),
     readout: $('#readoutSection'),
+    nowTitle: $('#now-title'),
     readoutMeta: $('#readoutMeta'),
     history: $('#historySection'),
     historyMeta: $('#historyMeta'),
@@ -111,7 +150,7 @@
   }
 
   function formatValue(key, value) {
-    if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+    if (value === null || value === undefined || !Number.isFinite(value)) return '–';
     return decimalsFor(key) ? value.toFixed(1) : intFmt.format(Math.round(value));
   }
 
@@ -244,8 +283,8 @@
       updateCharts(rows);
       renderTable(rows);
       el.readoutMeta.textContent = latest.time
-        ? 'Latest ' + timeHMS(latest.time) + ' · ' + state.readings.length + ' stored'
-        : state.readings.length + ' stored';
+        ? 'Latest ' + timeHMS(latest.time) + ' · ' + state.readings.length + ' readings'
+        : state.readings.length + ' readings';
     }
   }
 
@@ -253,27 +292,36 @@
     const stale = state.status === 'live' && isStale();
     const name = stale ? 'stale' : state.status;
     el.connPill.dataset.state = name;
-    el.connLabel.textContent = {
+    const label = {
       connecting: 'Connecting',
       live: 'Live',
-      stale: 'Stale',
+      stale: 'Not updating',
       waiting: 'Waiting',
       offline: 'Offline',
     }[name] || 'Connecting';
-    el.updatedAt.textContent = state.lastSync ? 'Updated ' + timeHMS(state.lastSync) : 'Updated —';
+    if (el.connLabel.textContent !== label) el.connLabel.textContent = label;
+    el.updatedAt.textContent = state.lastSync ? 'Updated ' + timeHMS(state.lastSync) : 'Updated –';
   }
 
   function renderVerdict(latest) {
     if (!latest) {
       delete el.verdict.dataset.level;
+      el.nowTitle.textContent = 'Right now';
+      el.verdictBadgeText.textContent = {
+        offline: 'Offline',
+        waiting: 'Waiting',
+        connecting: 'Connecting',
+      }[state.status] || 'Connecting';
+      el.verdictNote.textContent = 'One room, seven channels';
+      el.heroPeek.hidden = true;
       if (state.status === 'offline') {
-        el.verdictTitle.textContent = 'Server unreachable';
-        el.verdictDetail.textContent = 'The page keeps retrying every 5 seconds.';
+        el.verdictTitle.textContent = 'The sensor is out of reach.';
+        el.verdictDetail.textContent = 'The page keeps trying every 5 seconds.';
       } else if (state.status === 'waiting') {
-        el.verdictTitle.textContent = 'No readings yet';
-        el.verdictDetail.textContent = 'The sensor will appear here as soon as it posts a reading.';
+        el.verdictTitle.textContent = 'No readings yet.';
+        el.verdictDetail.textContent = 'The room will show up as soon as the sensor posts a reading.';
       } else {
-        el.verdictTitle.textContent = 'Connecting to the sensor';
+        el.verdictTitle.textContent = 'Waking up the sensor.';
         el.verdictDetail.textContent = 'Waiting for the first reading.';
       }
       return;
@@ -285,14 +333,26 @@
 
     if (!channels.length) {
       delete el.verdict.dataset.level;
-      el.verdictTitle.textContent = 'Reading available';
-      el.verdictDetail.textContent = 'This entry has no air quality values.';
+      el.verdictBadgeText.textContent = 'Reading received';
+      el.verdictNote.textContent = 'One room, seven channels';
+      el.verdictTitle.textContent = 'A reading, but no air values.';
+      el.verdictDetail.textContent = 'This entry has no air quality values to judge.';
+      updatePeek(latest);
       return;
     }
 
     const level = channels.reduce((worst, channel) => Math.max(worst, channel.level), 0);
     el.verdict.dataset.level = String(level);
-    el.verdictTitle.textContent = ['Air is fresh', 'Air is getting stale', 'Time to ventilate'][level];
+    el.verdictBadgeText.textContent = VERDICT_BADGES[level];
+    const current = state.status === 'live' && !isStale();
+    el.nowTitle.textContent = current ? 'Right now' : 'Last known';
+    el.verdictNote.textContent = !current
+      ? 'Showing the last known reading'
+      : level === 0
+        ? 'All air channels are in their comfort bands'
+        : level === 1 ? 'One air channel is above its band' : 'One air channel is well above its band';
+    el.verdictTitle.textContent = VERDICT_TITLES[level];
+    updatePeek(latest);
 
     if (level === 0) {
       const parts = [];
@@ -311,6 +371,13 @@
       ' — above ' + intFmt.format(limit) + ' ' + culprit.unit + '.' + advice;
   }
 
+  function updatePeek(latest) {
+    el.peekCo2.textContent = formatValue('eco2', latest.eco2);
+    el.peekPm.textContent = formatValue('pm2_5', latest.pm2_5);
+    el.peekTemp.textContent = formatValue('temperature', latest.temperature);
+    el.heroPeek.hidden = false;
+  }
+
   function renderMetrics(latest, rows) {
     const points = rows.slice().reverse();
     for (const metric of $$('.metric')) {
@@ -326,6 +393,16 @@
       }
       const flag = $('[data-flag]', metric);
       flag.title = levelTitle(key, level);
+      drawRuler(key, value, $('[data-ruler-zones]', metric), $('[data-ruler-marker]', metric));
+
+      let status = $('[data-level-text]', metric);
+      if (!status) {
+        status = document.createElement('span');
+        status.className = 'sr-only';
+        status.setAttribute('data-level-text', '');
+        metric.appendChild(status);
+      }
+      status.textContent = levelTitle(key, level);
 
       const series = points.map((point) => point[key]).filter((item) => item !== null);
       drawSpark($('[data-spark]', metric), series.slice(-SPARK_POINTS));
@@ -341,6 +418,27 @@
     }
   }
 
+  function drawRuler(key, value, zones, marker) {
+    const ruler = RULERS[key];
+    if (!ruler || !zones || !marker) return;
+
+    if (value === null || !Number.isFinite(value)) {
+      marker.style.display = 'none';
+      zones.style.background = 'var(--ruler-empty)';
+      return;
+    }
+
+    marker.style.display = '';
+    const span = ruler.max - ruler.min;
+    const stops = ruler.bands.map(([from, to, tone]) => {
+      const start = ((from - ruler.min) / span) * 100;
+      const end = ((to - ruler.min) / span) * 100;
+      return ZONE_COLOR[tone] + ' ' + start.toFixed(2) + '% ' + end.toFixed(2) + '%';
+    });
+    zones.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+    marker.style.left = Math.min(100, Math.max(0, ((value - ruler.min) / span) * 100)).toFixed(2) + '%';
+  }
+
   function drawSpark(svg, values) {
     const line = svg.querySelector('.spark__line');
     const area = svg.querySelector('.spark__area');
@@ -351,8 +449,8 @@
     }
 
     const width = 100;
-    const height = 28;
-    const inset = 2;
+    const height = 30;
+    const inset = 2.5;
     const min = Math.min.apply(null, values);
     const max = Math.max.apply(null, values);
     const flat = max === min;
@@ -376,13 +474,13 @@
 
   function renderHistoryMeta(rows) {
     if (!rows.length) {
-      el.historyMeta.textContent = '—';
+      el.historyMeta.textContent = '–';
       return;
     }
     const newest = rows[0].time;
     const oldest = rows[rows.length - 1].time;
     const span = newest && oldest ? dateHMS(oldest) + ' – ' + timeHMS(newest) : rows.length + ' readings';
-    el.historyMeta.textContent = rows.length + (rows.length === 1 ? ' point · ' : ' points · ') + span;
+    el.historyMeta.textContent = rows.length + (rows.length === 1 ? ' reading · ' : ' readings · ') + span;
   }
 
   function renderTable(rows) {
@@ -395,7 +493,7 @@
       const tr = document.createElement('tr');
       if (index === 0) tr.className = 'is-latest';
       const cells = [
-        row.time ? dateHMS(row.time) : '—',
+        row.time ? dateHMS(row.time) : '–',
         formatValue('eco2', row.eco2),
         formatValue('ech2o', row.ech2o),
         formatValue('tvoc', row.tvoc),
@@ -422,20 +520,20 @@
       return;
     }
     const reason = state.error && state.error.message ? ' (' + state.error.message + ')' : '';
-    const sync = state.lastSync ? ' Last successful sync ' + timeHMS(state.lastSync) + '.' : '';
-    el.errorBanner.textContent = 'Can’t reach the sensor server' + reason + '. Showing the last known readings.' + sync + ' Retrying every 5 seconds.';
+    const sync = state.lastSync ? ' Last good sync ' + timeHMS(state.lastSync) + '.' : '';
+    el.errorBanner.textContent = 'The sensor server is out of reach' + reason + '. Showing the last known readings.' + sync + ' Trying again every 5 seconds.';
     el.errorBanner.hidden = false;
   }
 
   function renderEmpty() {
     if (state.status === 'offline') {
-      el.emptyTitle.textContent = 'Server unreachable';
-      el.emptyText.textContent = 'Couldn’t load /api/readings' + (state.error && state.error.message ? ' (' + state.error.message + ')' : '') + '. The page retries every 5 seconds.';
+      el.emptyTitle.textContent = 'The sensor is out of reach';
+      el.emptyText.textContent = 'We couldn’t load /api/readings' + (state.error && state.error.message ? ' (' + state.error.message + ')' : '') + '. The page keeps trying every 5 seconds.';
     } else if (state.status === 'waiting') {
       el.emptyTitle.textContent = 'No readings yet';
-      el.emptyText.textContent = 'The sensor will appear here as soon as it posts its first reading.';
+      el.emptyText.textContent = 'The room will show up here as soon as the sensor posts its first reading.';
     } else {
-      el.emptyTitle.textContent = 'Connecting to the sensor';
+      el.emptyTitle.textContent = 'Waking up the sensor';
       el.emptyText.textContent = 'Reading the latest entries from the sensor server.';
     }
   }
@@ -452,7 +550,7 @@
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit: 6,
-          font: { family: MONO, size: 9 },
+          font: { family: FONT, size: 11 },
         },
       },
       y: {
@@ -463,8 +561,8 @@
         ticks: {
           color: COLOR.muted,
           maxTicksLimit: 4,
-          padding: 6,
-          font: { family: MONO, size: 9 },
+          padding: 8,
+          font: { family: FONT, size: 11 },
           callback: tickFormat,
         },
       },
@@ -481,8 +579,8 @@
       ticks: {
         color: COLOR.muted,
         maxTicksLimit: 4,
-        padding: 6,
-        font: { family: MONO, size: 9 },
+        padding: 8,
+        font: { family: FONT, size: 11 },
         callback: tickFormat,
       },
     };
@@ -492,16 +590,16 @@
   function tooltipOptions() {
     return {
       backgroundColor: COLOR.ink,
-      titleColor: '#f4f1e9',
-      bodyColor: '#f4f1e9',
-      titleFont: { family: MONO, size: 9.5, weight: '500' },
-      bodyFont: { family: MONO, size: 10 },
-      footerFont: { family: MONO, size: 9 },
-      padding: 10,
-      boxPadding: 4,
-      cornerRadius: 3,
-      boxWidth: 6,
-      boxHeight: 6,
+      titleColor: '#fff3e8',
+      bodyColor: '#fff3e8',
+      titleFont: { family: FONT, size: 11, weight: '700' },
+      bodyFont: { family: FONT, size: 12, weight: '500' },
+      footerFont: { family: FONT, size: 11 },
+      padding: 12,
+      boxPadding: 5,
+      cornerRadius: 10,
+      boxWidth: 8,
+      boxHeight: 8,
       usePointStyle: true,
       displayColors: true,
       callbacks: {
@@ -520,11 +618,39 @@
       animation: false,
       normalized: true,
       interaction: { mode: 'index', intersect: false },
-      layout: { padding: { top: 2, right: 2, bottom: 0, left: 0 } },
+      layout: { padding: { top: 4, right: 2, bottom: 0, left: 0 } },
       plugins: { legend: { display: false }, tooltip: tooltipOptions() },
       scales,
     };
   }
+
+  const latestPointPlugin = {
+    id: 'latestPoint',
+    afterDatasetsDraw(chart) {
+      const context = chart.ctx;
+      chart.data.datasets.forEach((dataset, index) => {
+        const meta = chart.getDatasetMeta(index);
+        if (meta.hidden) return;
+        for (let item = meta.data.length - 1; item >= 0; item -= 1) {
+          const value = dataset.data[item];
+          if (value === null || value === undefined || !Number.isFinite(Number(value))) continue;
+          const point = meta.data[item];
+          if (!point) return;
+          const props = point.getProps(['x', 'y'], true);
+          context.save();
+          context.beginPath();
+          context.arc(props.x, props.y, 3.8, 0, Math.PI * 2);
+          context.fillStyle = dataset.borderColor;
+          context.fill();
+          context.lineWidth = 2;
+          context.strokeStyle = COLOR.card;
+          context.stroke();
+          context.restore();
+          return;
+        }
+      });
+    },
+  };
 
   function makeLineDataset(config) {
     return {
@@ -534,13 +660,14 @@
       yAxisID: config.axis || 'y',
       data: [],
       borderColor: config.color,
-      backgroundColor: config.fill ? hexToRgba(config.color, 0.08) : 'transparent',
+      backgroundColor: config.fill ? hexToRgba(config.color, 0.1) : 'transparent',
       fill: config.fill ? 'start' : false,
-      borderWidth: 1.6,
+      borderWidth: 2.2,
+      borderCapStyle: 'round',
       borderDash: config.dash || [],
-      tension: 0.28,
+      tension: 0.35,
       pointRadius: 0,
-      pointHoverRadius: 3,
+      pointHoverRadius: 4,
       pointHoverBorderWidth: 2,
       pointHoverBackgroundColor: config.color,
       pointHoverBorderColor: COLOR.card,
@@ -561,8 +688,8 @@
       return;
     }
 
-    Chart.defaults.font.family = MONO;
-    Chart.defaults.font.size = 9;
+    Chart.defaults.font.family = FONT;
+    Chart.defaults.font.size = 11;
     Chart.defaults.color = COLOR.muted;
 
     charts.air = new Chart($('#chartAir'), {
@@ -576,6 +703,7 @@
         ],
       },
       options: baseOptions(scalesWithRight()),
+      plugins: [latestPointPlugin],
     });
 
     charts.climate = new Chart($('#chartClimate'), {
@@ -588,6 +716,7 @@
         ],
       },
       options: baseOptions(scalesWithRight()),
+      plugins: [latestPointPlugin],
     });
 
     charts.pm = new Chart($('#chartPm'), {
@@ -600,6 +729,7 @@
         ],
       },
       options: baseOptions(makeScales()),
+      plugins: [latestPointPlugin],
     });
   }
 
@@ -611,7 +741,7 @@
     const last = ordered[ordered.length - 1] && ordered[ordered.length - 1].time;
     const spanMs = first && last ? Math.abs(last.getTime() - first.getTime()) : 0;
     const labels = ordered.map((row) => {
-      if (!row.time) return '—';
+      if (!row.time) return '–';
       return spanMs > 10 * 60 * 1000 ? timeHM(row.time) : timeHMS(row.time);
     });
 
@@ -642,7 +772,7 @@
     };
     Object.entries(legend).forEach(([id, [key, unit]]) => {
       const node = document.getElementById(id);
-      if (node) node.textContent = latest[key] === null ? '—' : formatValue(key, latest[key]) + ' ' + unit;
+      if (node) node.textContent = latest[key] === null ? '–' : formatValue(key, latest[key]) + ' ' + unit;
     });
 
     const micro = ' micrograms per cubic metre';
