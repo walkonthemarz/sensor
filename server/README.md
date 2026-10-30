@@ -51,6 +51,11 @@ Submit a new sensor reading.
 
 Retrieve the latest 100 readings.
 
+The endpoint is rate limited **globally** to **120 requests per minute** (token
+bucket with a burst of 120). When the budget is exhausted the server responds
+with `429 Too Many Requests` and a `Retry-After` header. `POST` traffic is not
+counted; it remains protected by the API key.
+
 **Response:**
 ```json
 [
