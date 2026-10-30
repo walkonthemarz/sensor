@@ -89,6 +89,7 @@
     connLabel: $('#connLabel'),
     updatedAt: $('#updatedAt'),
     refreshBtn: $('#refreshBtn'),
+    installBtn: $('#installBtn'),
     verdict: $('#verdict'),
     verdictBadgeText: $('#verdictBadgeText'),
     verdictNote: $('#verdictNote'),
@@ -823,6 +824,14 @@
       state.error = null;
       state.lastSync = new Date();
       state.status = state.readings.length ? 'live' : 'waiting';
+
+      // A cached payload means the network is down, even though the request
+      // succeeded. Show the saved room and the time it was really fetched.
+      if (response.headers.get('X-M701-Cache') === 'hit') {
+        const fetchedAt = response.headers.get('Date');
+        state.status = 'offline';
+        state.lastSync = fetchedAt ? new Date(fetchedAt) : null;
+      }
     } catch (error) {
       state.status = 'offline';
       state.error = new Error(describeError(error));
@@ -839,6 +848,53 @@
   function syncRangeButtons() {
     el.rangeButtons.forEach((button) => {
       button.setAttribute('aria-pressed', String(Number(button.dataset.points) === state.range));
+    });
+  }
+
+  function isStandalone() {
+    const mode = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    return Boolean(mode || window.navigator.standalone);
+  }
+
+  function bindInstall() {
+    if (!el.installBtn || isStandalone()) return;
+    let prompt = null;
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      prompt = event;
+      el.installBtn.hidden = false;
+    });
+
+    el.installBtn.addEventListener('click', async () => {
+      if (!prompt) return;
+      prompt.prompt();
+      try {
+        await prompt.userChoice;
+      } finally {
+        prompt = null;
+        el.installBtn.hidden = true;
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      prompt = null;
+      el.installBtn.hidden = true;
+    });
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => refresh(), { once: true });
+      navigator.serviceWorker.register('sw.js')
+        .then(() => navigator.serviceWorker.ready)
+        // The first fetch runs before the worker controls the page, so warm
+        // the offline readings cache as soon as the worker is in charge.
+        .then(() => refresh())
+        .catch(() => {
+          /* the dashboard works without offline support */
+        });
     });
   }
 
@@ -886,6 +942,8 @@
     }
     syncRangeButtons();
     bindEvents();
+    bindInstall();
+    registerServiceWorker();
     render();
     refresh();
     setInterval(() => {

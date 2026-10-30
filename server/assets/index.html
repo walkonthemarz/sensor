@@ -8,6 +8,11 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#f7e0cd">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f7e0cd'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ffc145'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23de532d'/%3E%3C/svg%3E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Room">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <style>
     @font-face {
       font-family: "Gabarito";
@@ -188,6 +193,18 @@
     .refresh:active { transform: translateY(0); }
     .refresh svg { width: 14px; height: 14px; display: block; }
     .refresh[aria-busy="true"] svg { animation: spin .9s linear infinite; }
+    .install {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 13px 8px 11px; border: 1px solid var(--line-strong); border-radius: 999px;
+      background: var(--panel); color: var(--ink);
+      font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1;
+      cursor: pointer; touch-action: manipulation;
+      transition: transform .16s var(--ease-out), background .16s var(--ease-out);
+    }
+    .install[hidden] { display: none; }
+    .install:hover { background: var(--panel-warm); transform: translateY(-1px); }
+    .install:active { transform: translateY(0); }
+    .install svg { width: 14px; height: 14px; display: block; }
 
     /* ---------- room report ---------- */
     main { display: flex; flex-direction: column; min-height: calc(100vh - 62px); padding-top: 24px; }
@@ -533,6 +550,8 @@
       .badge { font-size: 12px; }
       .metric__value { font-size: 1.9rem; }
       .refresh { padding: 8px 11px 8px 9px; }
+      .install { padding: 9px; }
+      .install span { display: none; }
     }
   </style>
 </head>
@@ -551,6 +570,14 @@
           <span id="connLabel">Connecting</span>
         </span>
         <span class="stamp" id="updatedAt">Updated –</span>
+        <button type="button" class="install" id="installBtn" aria-label="Install this dashboard as an app" hidden>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 2.5v7"/>
+            <path d="M5 6.8 8 9.8l3-3"/>
+            <path d="M3 12.5h10"/>
+          </svg>
+          <span>Install</span>
+        </button>
         <button type="button" class="refresh" id="refreshBtn" aria-label="Refresh readings" aria-busy="false">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
             <path d="M13.5 8a5.5 5.5 0 1 1-1.7-3.97"/>
@@ -862,6 +889,6 @@
 
   <!-- Bump ?v= whenever these files change: the CDN caches .js for 4 hours. -->
   <script src="chart.umd.min.js?v=1"></script>
-  <script src="script.js?v=70e38cfa"></script>
+  <script src="script.js?v=db29a479"></script>
 </body>
 </html>
