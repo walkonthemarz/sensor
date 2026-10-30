@@ -224,6 +224,9 @@ mod tests {
         let retry_after = limiter
             .check()
             .expect_err("the request after the burst should be limited");
-        assert!(retry_after >= 1, "Retry-After should be at least one second");
+        assert!(
+            retry_after >= 1,
+            "Retry-After should be at least one second"
+        );
     }
 }

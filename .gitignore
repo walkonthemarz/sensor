@@ -27,6 +27,7 @@ env.local
 # Agent and editor state
 .reasonix/
 .gstack/
+.impeccable/
 .DS_Store
 *.log
 

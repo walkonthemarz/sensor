@@ -1,0 +1,5 @@
+# The Rust crates are built with cargo; pnpm only provides the task runner.
+# This file marks the repository root as the pnpm workspace root so there is a
+# single lockfile and one place for pnpm settings.
+packages:
+  - "."
