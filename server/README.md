@@ -8,6 +8,7 @@ A Rust-based web server built with [Axum](https://github.com/tokio-rs/axum) for 
 -   **Data Storage**: Persists data in a PostgreSQL database.
 -   **API Access**: Provides endpoints to retrieve recent sensor readings.
 -   **Static File Serving**: Serves a frontend dashboard from the `assets` directory.
+-   **Installable dashboard**: The dashboard ships a manifest and service worker, so it installs as an app and still shows the last known readings offline.
 -   **Security**: Supports HTTPS (TLS) and API Key authentication for data ingestion.
 
 ## Configuration
@@ -128,6 +129,26 @@ tunnel, which forwards to Caddy on `127.0.0.1:8080`. No inbound application
 ports need to be exposed.
 
 The full runbook is in [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Dashboard app (PWA)
+
+`assets/manifest.webmanifest` and `assets/sw.js` make the dashboard installable
+and offline-capable. The worker caches the app shell plus the last successful
+`GET /api/readings` payload; `POST` requests are never cached. When the cached
+payload is served, the page shows the offline banner and the original fetch time.
+
+Every file under `assets/` is served with `Cache-Control: no-cache`, so a deploy
+is picked up on the next load.
+
+When the shell changes (`index.html`, `script.js`, `chart.umd.min.js`, fonts, or
+icons):
+
+1. Bump the `?v=` value on the script tags in `index.html`.
+2. Use the same versioned URL in `SHELL` in `sw.js` and bump its `VERSION`.
+3. Keep `manifest.webmanifest` icon sizes in sync with `assets/icons/`.
+
+The check-in sources for the icons are `assets/icons/app-icon.svg` and
+`app-icon-maskable.svg`; the PNGs are rasterized from those.
 
 ## TODO
 
