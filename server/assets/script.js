@@ -528,7 +528,7 @@
   function renderEmpty() {
     if (state.status === 'offline') {
       el.emptyTitle.textContent = 'The sensor is out of reach';
-      el.emptyText.textContent = 'We couldn’t load /api/readings' + (state.error && state.error.message ? ' (' + state.error.message + ')' : '') + '. The page keeps trying every 5 seconds.';
+      el.emptyText.textContent = 'We couldn’t load readings from the sensor server' + (state.error && state.error.message ? ' (' + state.error.message + ')' : '') + '. The page keeps trying every 5 seconds.';
     } else if (state.status === 'waiting') {
       el.emptyTitle.textContent = 'No readings yet';
       el.emptyText.textContent = 'The room will show up here as soon as the sensor posts its first reading.';
