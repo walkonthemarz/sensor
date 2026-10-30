@@ -1,0 +1,27 @@
+{
+  "name": "sensor",
+  "private": true,
+  "description": "M701 indoor air quality monitor: Rust serial client, Axum/PostgreSQL API, static dashboard",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "cargo build --workspace --release --locked",
+    "build:server": "cargo build -p sensor_server --release --locked",
+    "build:client": "cargo build -p sensor_reader --release --locked",
+    "check": "cargo check --workspace --all-targets",
+    "test": "cargo test --workspace",
+    "fmt": "cargo fmt --all",
+    "fmt:check": "cargo fmt --all -- --check",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "lint": "pnpm fmt:check && pnpm clippy",
+    "ci": "pnpm lint && pnpm test",
+    "dev:server": "cd server && cargo run",
+    "dev:client": "cd client && cargo run --release --",
+    "migrate": "cd server && sqlx migrate run",
+    "migrate:add": "cd server && sqlx migrate add",
+    "docker:up": "docker compose -f server/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f server/docker-compose.yml down"
+  }
+}

@@ -30,22 +30,33 @@ histories are still present under `client/` and `server/`.
 
 ## Quick start
 
-Server (needs PostgreSQL):
+pnpm is the project task runner (it wraps `cargo`; there are no JS dependencies).
+Enable it once, then install:
 
 ```bash
-cd server
-cp .env.example .env
-cargo run
+corepack enable
+pnpm install
+```
+
+Server (needs PostgreSQL and `sqlx-cli`:
+`cargo install sqlx-cli --no-default-features --features postgres`):
+
+```bash
+cp server/.env.example server/.env
+pnpm migrate
+pnpm dev:server
 ```
 
 Client (Linux, sensor on `/dev/ttyACM0`):
 
 ```bash
-cd client
-cargo run --release -- --port /dev/ttyACM0 --server-url http://127.0.0.1:3000/api/readings
+cp client/.env.example client/.env
+pnpm dev:client -- --port /dev/ttyACM0 --server-url http://127.0.0.1:3000/api/readings
 ```
 
 Set `SENSOR_API_KEY` in the environment (or a `.env` file) on both sides.
+See [AGENTS.md](AGENTS.md) for the full command list and contributor notes;
+plain `cargo` commands still work.
 
 ## Deployment
 
