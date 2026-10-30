@@ -7,7 +7,7 @@ Wants=sensor-postgres.service
 Type=simple
 WorkingDirectory=%h/sensor/server
 EnvironmentFile=%h/sensor/server/.env
-ExecStart=%h/sensor/server/target/release/sensor_server
+ExecStart=%h/sensor/target/release/sensor_server
 Restart=always
 RestartSec=3
 

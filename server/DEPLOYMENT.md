@@ -95,7 +95,7 @@ journalctl --user -u sensor-client -f
 The service runs:
 
 ```bash
-./target/release/sensor_reader --port /dev/ttyACM0 \
+../target/release/sensor_reader --port /dev/ttyACM0 \
   --server-url https://sensor.boxcube.xyz/api/readings
 ```
 
