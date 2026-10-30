@@ -11,7 +11,7 @@ Docker access is available.
 | :--- | :--- |
 | PostgreSQL 18 binaries | `~/pgsql` |
 | PostgreSQL data | `~/pgdata` (port 5433, loopback only) |
-| API binary | `~/sensor/server/target/release/sensor_server` |
+| API binary | `~/sensor/target/release/sensor_server` |
 | Caddy | `~/caddy/caddy` (port 8080) |
 | Cloudflare Tunnel | `sensor-tunnel.service` (public HTTPS) |
 

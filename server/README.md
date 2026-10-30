@@ -117,7 +117,7 @@ cargo run
 Build the release binary:
 ```bash
 cargo build --release
-./target/release/sensor_server
+../target/release/sensor_server
 ```
 
 ## Deployment
