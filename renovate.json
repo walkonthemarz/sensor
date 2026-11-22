@@ -7,8 +7,9 @@
   },
   "packageRules": [
     {
-      "description": "One PR for routine upgrades; majors stay separate.",
+      "description": "Group routine upgrades. 0.x bumps can be breaking in Cargo, so Renovate leaves those as individual PRs.",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchCurrentVersion": ">=1.0.0",
       "groupName": "non-major dependencies"
     }
   ]
