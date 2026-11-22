@@ -32,8 +32,12 @@ const RETENTION_DISABLED: i32 = 0;
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 struct Reading {
     id: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    timestamp: Option<chrono::NaiveDateTime>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_timestamp",
+        deserialize_with = "deserialize_timestamp"
+    )]
+    timestamp: Option<time::PrimitiveDateTime>,
     eco2: i16,
     ech2o: i16,
     tvoc: i16,
@@ -41,6 +45,51 @@ struct Reading {
     pm10: i16,
     temperature: f32,
     humidity: f32,
+}
+
+/// Postgres stores `timestamp` without a zone; keep the API's naive-UTC shape
+/// (`2026-11-22T07:47:37.937082`) because the dashboard appends `Z` itself.
+const TIMESTAMP_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
+    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]"
+);
+const TIMESTAMP_FORMAT_SECONDS: &[time::format_description::FormatItem<'static>] =
+    time::macros::format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]");
+
+fn serialize_timestamp<S>(
+    value: &Option<time::PrimitiveDateTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::Error as _;
+
+    match value {
+        Some(timestamp) => serializer.serialize_str(
+            &timestamp
+                .format(TIMESTAMP_FORMAT)
+                .map_err(S::Error::custom)?,
+        ),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_timestamp<'de, D>(
+    deserializer: D,
+) -> Result<Option<time::PrimitiveDateTime>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error as _;
+
+    let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    time::PrimitiveDateTime::parse(&raw, TIMESTAMP_FORMAT)
+        .or_else(|_| time::PrimitiveDateTime::parse(&raw, TIMESTAMP_FORMAT_SECONDS))
+        .map(Some)
+        .map_err(D::Error::custom)
 }
 
 /// Token bucket shared by every client, used to cap `GET /api/readings`.
@@ -498,5 +547,29 @@ mod tests {
             retry_after >= 1,
             "Retry-After should be at least one second"
         );
+    }
+
+    #[test]
+    fn timestamp_serializes_as_naive_utc() {
+        let reading = Reading {
+            id: Some(1),
+            timestamp: Some(time::macros::datetime!(2026-11-22 07:47:37.937082)),
+            eco2: 400,
+            ech2o: 10,
+            tvoc: 50,
+            pm2_5: 5,
+            pm10: 5,
+            temperature: 22.0,
+            humidity: 45.0,
+        };
+
+        let json = serde_json::to_string(&reading).expect("the reading should serialize");
+        assert!(
+            json.contains(r#""timestamp":"2026-11-22T07:47:37.937082""#),
+            "unexpected timestamp format: {json}"
+        );
+
+        let decoded: Reading = serde_json::from_str(&json).expect("the reading should deserialize");
+        assert_eq!(decoded.timestamp, reading.timestamp);
     }
 }

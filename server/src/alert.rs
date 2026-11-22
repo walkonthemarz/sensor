@@ -3,8 +3,8 @@
 //!
 //! The thresholds mirror the "bad" bands in `assets/script.js`:
 
-use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgPool};
+use time::OffsetDateTime;
 
 use crate::Reading;
 
@@ -43,9 +43,9 @@ impl AlertLevel {
 #[derive(Debug, Clone)]
 struct AlertState {
     level: AlertLevel,
-    bad_since: Option<DateTime<Utc>>,
-    clear_since: Option<DateTime<Utc>>,
-    last_notified_at: Option<DateTime<Utc>>,
+    bad_since: Option<OffsetDateTime>,
+    clear_since: Option<OffsetDateTime>,
+    last_notified_at: Option<OffsetDateTime>,
 }
 
 impl Default for AlertState {
@@ -79,9 +79,9 @@ pub(crate) struct Alert {
 #[derive(Debug, FromRow)]
 struct AlertStateRow {
     level: String,
-    bad_since: Option<DateTime<Utc>>,
-    clear_since: Option<DateTime<Utc>>,
-    last_notified_at: Option<DateTime<Utc>>,
+    bad_since: Option<OffsetDateTime>,
+    clear_since: Option<OffsetDateTime>,
+    last_notified_at: Option<OffsetDateTime>,
 }
 
 /// Evaluate a reading and persist the updated state in one transaction.
@@ -122,7 +122,7 @@ pub(crate) async fn evaluate_and_store(
         last_notified_at: row.last_notified_at,
     };
 
-    let now = Utc::now();
+    let now = OffsetDateTime::now_utc();
     let alert = evaluate(reading, &mut state, now);
 
     sqlx::query(
@@ -151,7 +151,7 @@ pub(crate) async fn evaluate_and_store(
 
 /// Mutate the state with one reading and return an alert when this reading is
 /// the one that confirms a new bad episode.
-fn evaluate(reading: &Reading, state: &mut AlertState, now: DateTime<Utc>) -> Option<Alert> {
+fn evaluate(reading: &Reading, state: &mut AlertState, now: OffsetDateTime) -> Option<Alert> {
     let bad = bad_metrics(reading);
 
     if !bad.is_empty() {
@@ -162,10 +162,10 @@ fn evaluate(reading: &Reading, state: &mut AlertState, now: DateTime<Utc>) -> Op
         }
 
         let bad_since = *state.bad_since.get_or_insert(now);
-        let confirmed = now.signed_duration_since(bad_since).num_seconds() >= BAD_CONFIRM_SECS;
+        let confirmed = (now - bad_since).whole_seconds() >= BAD_CONFIRM_SECS;
         let cooled = state
             .last_notified_at
-            .is_none_or(|last| now.signed_duration_since(last).num_seconds() >= COOLDOWN_SECS);
+            .is_none_or(|last| (now - last).whole_seconds() >= COOLDOWN_SECS);
 
         if confirmed && cooled {
             state.level = AlertLevel::Bad;
@@ -179,7 +179,7 @@ fn evaluate(reading: &Reading, state: &mut AlertState, now: DateTime<Utc>) -> Op
 
     if state.level == AlertLevel::Bad {
         let clear_since = *state.clear_since.get_or_insert(now);
-        if now.signed_duration_since(clear_since).num_seconds() >= CLEAR_CONFIRM_SECS {
+        if (now - clear_since).whole_seconds() >= CLEAR_CONFIRM_SECS {
             state.level = AlertLevel::Clear;
             state.bad_since = None;
             state.clear_since = None;
@@ -298,7 +298,7 @@ fn format_number(value: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
+    use time::Duration;
 
     fn reading(eco2: i16) -> Reading {
         Reading {
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn notification_waits_for_confirmation_and_sends_once() {
         let mut state = AlertState::default();
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         let poor = reading(1340);
 
         assert!(evaluate(&poor, &mut state, start).is_none());
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn clear_state_needs_a_sustained_recovery() {
         let mut state = AlertState::default();
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         let poor = reading(1400);
         let good = reading(600);
 
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn cooldown_suppresses_a_new_episode() {
         let mut state = AlertState::default();
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         let poor = reading(1500);
         let good = reading(500);
 

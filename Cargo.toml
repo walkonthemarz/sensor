@@ -17,7 +17,6 @@ repository = "https://github.com/walkonthemarz/sensor"
 anyhow = "1.0"
 axum = "0.7"
 base64ct = "1.8"
-chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = "0.15"
 http = "1"
@@ -27,7 +26,8 @@ sad-web-push = { version = "0.12", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serialport = "4.6"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "time"] }
+time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.5", features = ["fs", "cors", "set-header"] }
