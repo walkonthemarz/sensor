@@ -25,7 +25,7 @@ image as static files.
 
 ## Toolchain
 
-- Rust stable, edition 2024 (workspace resolver 2).
+- Rust stable, edition 2024 (workspace resolver 3); the workspace MSRV is 1.94 because SQLx 0.9 requires it.
 - PostgreSQL for the server; `sqlx-cli` for migrations.
 - Linux serial access (`libudev`/`pkg-config` are needed to build `serialport`).
 - Node.js >= 20 and pnpm for the task runner only.
