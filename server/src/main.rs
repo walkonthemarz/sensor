@@ -33,6 +33,7 @@ const RETENTION_DISABLED: i32 = 0;
 struct Reading {
     id: Option<i32>,
     #[serde(
+        default,
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_timestamp",
         deserialize_with = "deserialize_timestamp"
@@ -571,5 +572,13 @@ mod tests {
 
         let decoded: Reading = serde_json::from_str(&json).expect("the reading should deserialize");
         assert_eq!(decoded.timestamp, reading.timestamp);
+    }
+
+    #[test]
+    fn reading_accepts_the_client_payload_without_a_timestamp() {
+        let json = r#"{"eco2":400,"ech2o":10,"tvoc":50,"pm2_5":5,"pm10":5,"temperature":22.0,"humidity":45.0}"#;
+        let reading: Reading = serde_json::from_str(json).expect("the client payload should parse");
+        assert!(reading.timestamp.is_none());
+        assert_eq!(reading.eco2, 400);
     }
 }
