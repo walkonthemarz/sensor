@@ -101,9 +101,7 @@ fn parse_frame(buffer: &[u8]) -> Option<SensorData> {
 fn main() -> Result<()> {
     dotenv().ok(); // Load .env file
     let args = Args::parse();
-    let client = reqwest::blocking::Client::builder()
-        .use_rustls_tls()
-        .build()?;
+    let client = reqwest::blocking::Client::builder().build()?;
 
     println!("Opening port {} at {} baud...", args.port, args.baud_rate);
 
