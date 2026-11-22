@@ -30,6 +30,8 @@ cd ~/sensor/server
 cp .env.example .env
 chmod 600 .env
 # Set POSTGRES_PASSWORD and SENSOR_API_KEY in .env
+# Optional browser alerts: run `pnpm vapid:keys` from the repo root and set
+# VAPID_PRIVATE_KEY and VAPID_SUBJECT in .env before starting.
 docker compose up -d --build
 docker compose ps
 ```

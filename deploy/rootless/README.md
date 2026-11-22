@@ -25,8 +25,9 @@ mkdir -p ~/pgsql && tar -xzf /tmp/pg.tar.gz -C ~/pgsql --strip-components=1
 ~/pgsql/bin/initdb -D ~/pgdata -U sensor_user --auth=trust --no-locale -E UTF8
 ~/pgsql/bin/pg_ctl -D ~/pgdata -o "-p 5433 -k /tmp" start
 ~/pgsql/bin/createdb -h 127.0.0.1 -p 5433 -U sensor_user sensor_data
-~/pgsql/bin/psql -h 127.0.0.1 -p 5433 -U sensor_user -d sensor_data \
-  -f ~/sensor/server/migrations/20241204153819_create_readings_table.sql
+for migration in ~/sensor/server/migrations/*.sql; do
+  ~/pgsql/bin/psql -h 127.0.0.1 -p 5433 -U sensor_user -d sensor_data -f "$migration"
+done
 
 # Rust toolchain and API binary
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
@@ -48,6 +49,29 @@ systemctl --user enable --now sensor-postgres sensor-server sensor-caddy
 
 Caddy listens on `127.0.0.1:8080`; the `sensor-tunnel` service forwards
 `sensor.boxcube.xyz` to it. No sudo and no inbound ports are required.
+
+## Updating
+
+After pulling new code, apply any new SQL before restarting the API:
+
+```bash
+for migration in ~/sensor/server/migrations/*.sql; do
+  ~/pgsql/bin/psql -h 127.0.0.1 -p 5433 -U sensor_user -d sensor_data -f "$migration"
+done
+cd ~/sensor/server && cargo build --release --locked
+systemctl --user restart sensor-server
+```
+
+For browser push alerts, add these to `~/sensor/server/.env` before the
+restart (generate the pair with `pnpm vapid:keys` from a checkout):
+
+```bash
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:you@example.com
+```
+
+The server loads that file through `EnvironmentFile=` in
+`deploy/systemd/sensor-server.service`.
 
 ## Time
 

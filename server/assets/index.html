@@ -205,6 +205,9 @@
     .install:hover { background: var(--panel-warm); transform: translateY(-1px); }
     .install:active { transform: translateY(0); }
     .install svg { width: 14px; height: 14px; display: block; }
+    .alerts[aria-pressed="true"] { border-color: var(--live-line); background: var(--panel-warm); color: var(--good); }
+    .alerts[aria-pressed="true"]:hover { background: var(--panel); }
+    .alerts[disabled] { cursor: wait; opacity: .7; }
 
     /* ---------- room report ---------- */
     main { display: flex; flex-direction: column; min-height: calc(100vh - 62px); padding-top: 24px; }
@@ -578,6 +581,13 @@
           </svg>
           <span>Install</span>
         </button>
+        <button type="button" class="install alerts" id="alertsBtn" aria-label="Enable air quality alerts" aria-pressed="false" hidden>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 2.5a3.3 3.3 0 0 0-3.3 3.3v2.4L3.4 10.7h9.2l-1.3-2.5V5.8A3.3 3.3 0 0 0 8 2.5Z"/>
+            <path d="M6.6 12.2a1.5 1.5 0 0 0 2.8 0"/>
+          </svg>
+          <span id="alertsLabel">Alerts</span>
+        </button>
         <button type="button" class="refresh" id="refreshBtn" aria-label="Refresh readings" aria-busy="false">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
             <path d="M13.5 8a5.5 5.5 0 1 1-1.7-3.97"/>
@@ -889,6 +899,6 @@
 
   <!-- Bump ?v= whenever these files change: the CDN caches .js for 4 hours. -->
   <script src="chart.umd.min.js?v=1"></script>
-  <script src="script.js?v=db29a479"></script>
+  <script src="script.js?v=9d3e7a10"></script>
 </body>
 </html>

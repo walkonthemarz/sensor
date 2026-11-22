@@ -101,6 +101,34 @@ Keep that path stable.
   For the rootless deployment, run `pnpm migrate` (or the SQL file) manually.
 - Never edit a migration that has shipped; add a new timestamped one.
 
+### Data retention
+
+`sensor_server` prunes readings older than `RETENTION_DAYS` (default 7) at
+startup and then hourly from a background tokio task. `RETENTION_DAYS=0`
+disables cleanup. The delete compares naive-UTC `timestamp` values against UTC
+wall-clock time and relies on `readings_timestamp_idx`; keep it indexed if you
+change the query. Concurrent servers can each run the task because the delete is
+idempotent.
+
+### Web Push alerts
+
+Air-quality alerts are server-initiated Web Push, not page-side polling. iOS
+has no background timer, so `server/src/alert.rs` evaluates each ingested
+reading and `server/src/push.rs` sends via VAPID. The pure state machine uses
+30 s of sustained bad air, one alert per episode, a 1 h cooldown, and 2 min of
+good air to clear. State lives in `alert_state`; subscriptions live in
+`push_subscriptions` (migration `20261104120000_add_push_alerts.sql`).
+
+- `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` enable it; the public key is derived
+  and served from `GET /api/push/key`. Empty config leaves ingestion working
+  and hides the dashboard button.
+- Push endpoints are allowlisted to Apple/Google/Mozilla/Microsoft because the
+  server POSTs to the stored URL.
+- The service worker owns `push` and `notificationclick`; the page only asks
+  for permission (must be a tap) and calls `pushManager.subscribe`.
+- iOS 16.4+ supports Web Push only for Home Screen installs, and every push
+  must be visible. Do not add silent/data-only pushes.
+
 ### API contract — do not break it
 
 - `POST /api/readings` requires the `x-api-key` header to equal
