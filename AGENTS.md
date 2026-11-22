@@ -154,6 +154,8 @@ and rejects writes without it.
 - Follow surrounding style; run `pnpm fmt` before committing.
 - `edition = "2024"`; both binaries return `anyhow::Result` and use `anyhow`
   context instead of panics for runtime failures.
+- Add new crate versions to `[workspace.dependencies]` in the root `Cargo.toml`
+  and reference them as `crate.workspace = true` in the member manifest.
 - Server data structures use `serde` for the API and `sqlx::FromRow` for
   queries. Keep SQL in `server/migrations/` and bound parameters in queries.
 - Prefer small, focused modules over new dependencies. Justify any new crate.
@@ -176,4 +178,15 @@ stale/waiting, offline, mobile, and reduced-motion states. For API changes, hit
 shape.
 
 The blocking CI job (`.github/workflows/ci.yml`) runs `cargo test --workspace`
-on Ubuntu after installing `libudev-dev` and `pkg-config`.
+on Ubuntu after installing `libudev-dev` and `pkg-config`. A second job runs
+`cargo audit` through `rustsec/audit-check` on every push and pull request and
+fails when a locked dependency has a RustSec advisory; upgrade the workspace
+`Cargo.lock` instead of ignoring it. The only ignores live in
+`.cargo/audit.toml` and cover sqlx's optional MySQL/SQLite drivers, which are
+resolved into `Cargo.lock` but never built.
+
+Dependency upgrades come from Renovate (`renovate.json` plus
+`.github/workflows/renovate.yml`). It needs the `RENOVATE_TOKEN` repository
+secret (classic PAT with `repo` and `workflow` scopes). Crate versions live in
+`[workspace.dependencies]` at the root `Cargo.toml`; members inherit them with
+`crate.workspace = true`.

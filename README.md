@@ -88,6 +88,20 @@ The client posts a 17-byte M701 frame decoded into:
 }
 ```
 
+## Maintenance
+
+- **Renovate** (`renovate.json`, `.github/workflows/renovate.yml`) runs daily
+  against the Cargo workspace, the GitHub Actions versions, and the pnpm task
+  runner metadata. Configure the `RENOVATE_TOKEN` repository secret with a
+  classic PAT that has `repo` and `workflow` scopes, then start a run from the
+  Actions tab (or let the schedule pick it up).
+- **`cargo audit`** (`.github/workflows/ci.yml`) runs on every push and pull
+  request. It fails the build when a locked dependency matches a RustSec
+  advisory, so the workspace `Cargo.lock` is the file to upgrade. The two
+  ignores in `.cargo/audit.toml` only cover `rsa` and `libsqlite3-sys`, which
+  `Cargo.lock` resolves for sqlx's optional MySQL/SQLite drivers even though
+  this project builds the Postgres driver only.
+
 ## Hardware
 
 The M701 outputs 17-byte UART frames at 9600 baud. The field map is documented in
