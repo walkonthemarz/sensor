@@ -90,6 +90,8 @@
     updatedAt: $('#updatedAt'),
     refreshBtn: $('#refreshBtn'),
     installBtn: $('#installBtn'),
+    alertsBtn: $('#alertsBtn'),
+    alertsLabel: $('#alertsLabel'),
     verdict: $('#verdict'),
     verdictBadgeText: $('#verdictBadgeText'),
     verdictNote: $('#verdictNote'),
@@ -128,6 +130,10 @@
   };
 
   const charts = {};
+  let pushRegistration = null;
+  let pushPublicKey = null;
+  let pushSubscription = null;
+  let alertsBusy = false;
   const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
   const pad = (n) => String(n).padStart(2, '0');
 
@@ -883,15 +889,181 @@
     });
   }
 
+  /* ---------- air quality alerts (Web Push) ---------- */
+
+  function pushSupported() {
+    return 'serviceWorker' in navigator && 'PushManager' in window &&
+      'Notification' in window && typeof Notification.requestPermission === 'function';
+  }
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  // iOS only exposes Web Push to apps installed on the Home Screen.
+  function alertContext() {
+    return !isIOS() || isStandalone();
+  }
+
+  function urlBase64ToUint8Array(value) {
+    const padding = '='.repeat((4 - (value.length % 4)) % 4);
+    const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+    return bytes;
+  }
+
+  function updateAlertsButton() {
+    if (!el.alertsBtn || !el.alertsLabel || !pushPublicKey) return;
+
+    const subscribed = Boolean(pushSubscription) && Notification.permission === 'granted';
+    let label = 'Alerts';
+    let description = 'Enable air quality alerts';
+
+    if (Notification.permission === 'denied') {
+      label = 'Alerts blocked';
+      description = 'Allow notifications for Room in your device settings';
+    } else if (subscribed) {
+      label = 'Alerts on';
+      description = 'Turn off air quality alerts';
+    }
+
+    el.alertsBtn.hidden = false;
+    el.alertsBtn.setAttribute('aria-pressed', String(subscribed));
+    el.alertsBtn.setAttribute('aria-label', description);
+    el.alertsBtn.title = description;
+    el.alertsLabel.textContent = label;
+  }
+
+  function storeSubscription(subscription) {
+    return fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+  }
+
+  async function syncPushState() {
+    if (!pushRegistration) return;
+    try {
+      pushSubscription = await pushRegistration.pushManager.getSubscription();
+    } catch (_) {
+      pushSubscription = null;
+    }
+
+    updateAlertsButton();
+
+    // Keep the server's copy current if the browser rotated the subscription.
+    if (pushSubscription) {
+      await storeSubscription(pushSubscription).catch(() => {});
+    }
+  }
+
+  async function initAlerts(registration) {
+    if (!el.alertsBtn || !pushSupported() || !alertContext()) return;
+    pushRegistration = registration;
+
+    try {
+      const response = await fetch('/api/push/key', {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (typeof payload.publicKey !== 'string' || !payload.publicKey) return;
+      pushPublicKey = payload.publicKey;
+      await syncPushState();
+    } catch (_) {
+      /* alerts are optional; leave the button hidden */
+    }
+  }
+
+  async function enableAlerts() {
+    const subscription = await pushRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(pushPublicKey),
+    });
+
+    const response = await storeSubscription(subscription);
+
+    if (!response.ok) {
+      await subscription.unsubscribe().catch(() => {});
+      throw new Error('HTTP ' + response.status);
+    }
+
+    pushSubscription = subscription;
+  }
+
+  async function disableAlerts() {
+    const subscription = pushSubscription || await pushRegistration.pushManager.getSubscription();
+    if (!subscription) return;
+    pushSubscription = null;
+
+    try {
+      await fetch('/api/push/subscribe', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+    } catch (_) {
+      /* remove the local subscription even if the server is unreachable */
+    }
+
+    await subscription.unsubscribe().catch(() => {});
+  }
+
+  async function toggleAlerts() {
+    if (alertsBusy || !pushRegistration) return;
+    if (Notification.permission === 'denied') {
+      updateAlertsButton();
+      return;
+    }
+
+    alertsBusy = true;
+    el.alertsBtn.disabled = true;
+    el.alertsBtn.setAttribute('aria-busy', 'true');
+
+    try {
+      if (pushSubscription) {
+        await disableAlerts();
+      } else {
+        // iOS drops the user gesture if the prompt is requested after an
+        // await, so call it before the first suspension point.
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          await enableAlerts();
+        } else {
+          updateAlertsButton();
+        }
+      }
+    } catch (error) {
+      console.warn('Air alerts could not be updated:', error);
+    } finally {
+      alertsBusy = false;
+      el.alertsBtn.disabled = false;
+      el.alertsBtn.removeAttribute('aria-busy');
+      await syncPushState();
+    }
+  }
+
+  function bindAlerts() {
+    if (el.alertsBtn) el.alertsBtn.addEventListener('click', toggleAlerts);
+  }
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     window.addEventListener('load', () => {
       navigator.serviceWorker.addEventListener('controllerchange', () => refresh(), { once: true });
       navigator.serviceWorker.register('sw.js')
         .then(() => navigator.serviceWorker.ready)
-        // The first fetch runs before the worker controls the page, so warm
-        // the offline readings cache as soon as the worker is in charge.
-        .then(() => refresh())
+        .then((registration) => {
+          // The first fetch runs before the worker controls the page, so warm
+          // the offline readings cache as soon as the worker is in charge.
+          refresh();
+          initAlerts(registration);
+        })
         .catch(() => {
           /* the dashboard works without offline support */
         });
@@ -943,6 +1115,7 @@
     syncRangeButtons();
     bindEvents();
     bindInstall();
+    bindAlerts();
     registerServiceWorker();
     render();
     refresh();
