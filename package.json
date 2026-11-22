@@ -21,7 +21,8 @@
     "dev:client": "cd client && cargo run --release --",
     "migrate": "cd server && sqlx migrate run",
     "migrate:add": "cd server && sqlx migrate add",
-    "docker:up": "docker compose -f server/docker-compose.yml up -d --build",
-    "docker:down": "docker compose -f server/docker-compose.yml down"
+    "vapid:keys": "pnpm dlx web-push generate-vapid-keys",
+    "docker:up": "docker compose --env-file server/.env -f server/docker-compose.yml up -d --build",
+    "docker:down": "docker compose --env-file server/.env -f server/docker-compose.yml down"
   }
 }
