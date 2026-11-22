@@ -22,10 +22,24 @@ jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
+      - name: Check for the Renovate token
+        id: token
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+        run: |
+          if [ -z "$RENOVATE_TOKEN" ]; then
+            echo "::warning::RENOVATE_TOKEN is not set; add a PAT with repo and workflow scopes to enable Renovate."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
+        if: steps.token.outputs.enabled == 'true'
         uses: actions/checkout@v7
 
       - name: Run Renovate
+        if: steps.token.outputs.enabled == 'true'
         uses: renovatebot/github-action@v46.3.14
         with:
           # RENOVATE_TOKEN is a PAT (repo + workflow scopes) stored in the
