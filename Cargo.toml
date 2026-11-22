@@ -15,21 +15,21 @@ repository = "https://github.com/walkonthemarz/sensor"
 # with `<crate>.workspace = true`, so upgrades happen in one place.
 [workspace.dependencies]
 anyhow = "1.0"
-axum = "0.7"
+axum = "0.8"
 base64ct = "1.8"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = "0.15"
 http = "1"
 p256 = "0.14"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "rustls-tls-native-roots"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls", "rustls-tls-native-roots"] }
 sad-web-push = { version = "0.12", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serialport = "4.6"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "postgres", "chrono"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.5", features = ["fs", "cors", "set-header"] }
+tower-http = { version = "0.7", features = ["fs", "cors", "set-header"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
