@@ -10,9 +10,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install serial build dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - name: Test workspace
         run: cargo test --workspace
+
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # audit-check reports through a check run and creates an issue when the
+      # audit runs on a schedule.
+      checks: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Audit Cargo.lock against the RustSec advisory database
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
