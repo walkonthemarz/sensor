@@ -2,7 +2,7 @@ name: sensor
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:19-alpine
     container_name: sensor-postgres
     restart: unless-stopped
     environment:
