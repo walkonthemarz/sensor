@@ -1,9 +1,12 @@
+mod alert;
+mod push;
+
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::{
     Router,
     extract::{Json, State},
-    routing::post,
+    routing::{get, post},
 };
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
@@ -18,6 +21,13 @@ use tower_http::set_header::SetResponseHeaderLayer;
 /// Global budget for `GET /api/readings`: 120 requests per rolling minute.
 const READ_RATE_LIMIT: f64 = 120.0;
 const READ_RATE_WINDOW: Duration = Duration::from_secs(60);
+
+/// Days of readings to keep when `RETENTION_DAYS` is unset or invalid.
+const DEFAULT_RETENTION_DAYS: i32 = 7;
+/// How often the retention task deletes expired readings.
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+/// `RETENTION_DAYS=0` disables automatic cleanup.
+const RETENTION_DISABLED: i32 = 0;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 struct Reading {
@@ -70,6 +80,7 @@ impl RateLimiter {
 struct AppState {
     pool: Pool<Postgres>,
     read_limiter: Arc<Mutex<RateLimiter>>,
+    push: Option<Arc<push::PushConfig>>,
 }
 
 #[tokio::main]
@@ -85,10 +96,40 @@ async fn main() -> anyhow::Result<()> {
         .connect(&database_url)
         .await?;
 
+    let push = match push::PushConfig::from_env() {
+        Ok(Some(config)) => {
+            tracing::info!("web push air alerts enabled");
+            Some(Arc::new(config))
+        }
+        Ok(None) => {
+            tracing::info!(
+                "web push air alerts disabled; set VAPID_PRIVATE_KEY and VAPID_SUBJECT to enable"
+            );
+            None
+        }
+        Err(error) => {
+            tracing::error!(%error, "web push air alerts disabled");
+            None
+        }
+    };
+
     let state = AppState {
         pool,
         read_limiter: Arc::new(Mutex::new(RateLimiter::new())),
+        push,
     };
+
+    // Prune expired readings in the background so the table has a fixed
+    // ceiling. The task is idempotent, so running more than one server is safe.
+    let retention_raw = std::env::var("RETENTION_DAYS").ok();
+    let retention_days = parse_retention_days(retention_raw.as_deref());
+    if retention_days > RETENTION_DISABLED {
+        tracing::info!(retention_days, "pruning readings past the retention window");
+        let cleanup_pool = state.pool.clone();
+        tokio::spawn(run_retention_task(cleanup_pool, retention_days));
+    } else {
+        tracing::info!("RETENTION_DAYS=0; automatic reading cleanup is disabled");
+    }
 
     // Static assets are revalidated on every load so a stale dashboard script
     // can never outlive a deploy.
@@ -102,6 +143,11 @@ async fn main() -> anyhow::Result<()> {
     // Router
     let app = Router::new()
         .route("/api/readings", post(add_reading).get(get_readings))
+        .route("/api/push/key", get(push_key))
+        .route(
+            "/api/push/subscribe",
+            post(subscribe_push).delete(unsubscribe_push),
+        )
         .nest_service("/", assets)
         .with_state(state);
 
@@ -116,6 +162,59 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Parse `RETENTION_DAYS`, falling back to the default for missing or invalid
+/// values. Zero is valid and disables cleanup.
+fn parse_retention_days(raw: Option<&str>) -> i32 {
+    match raw.map(str::trim) {
+        None | Some("") => DEFAULT_RETENTION_DAYS,
+        Some(value) => match value.parse::<i32>() {
+            Ok(days) if days >= RETENTION_DISABLED => days,
+            _ => {
+                tracing::warn!(
+                    value,
+                    default = DEFAULT_RETENTION_DAYS,
+                    "invalid RETENTION_DAYS; using the default"
+                );
+                DEFAULT_RETENTION_DAYS
+            }
+        },
+    }
+}
+
+/// Delete readings older than the retention window and report how many rows
+/// were removed.
+async fn prune_old_readings(
+    pool: &Pool<Postgres>,
+    retention_days: i32,
+) -> Result<u64, sqlx::Error> {
+    // The column is naive UTC, so compare against UTC wall-clock time rather
+    // than `now()` (which is timestamptz and depends on the session timezone).
+    let result = sqlx::query(
+        r#"
+        DELETE FROM readings
+        WHERE timestamp < (now() AT TIME ZONE 'UTC') - make_interval(days => $1)
+        "#,
+    )
+    .bind(retention_days)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+/// Run the retention delete once on startup, then hourly.
+async fn run_retention_task(pool: Pool<Postgres>, retention_days: i32) {
+    loop {
+        match prune_old_readings(&pool, retention_days).await {
+            Ok(0) => tracing::debug!(retention_days, "no readings past the retention window"),
+            Ok(deleted) => tracing::info!(deleted, retention_days, "pruned old readings"),
+            Err(error) => tracing::error!(%error, "failed to prune old readings"),
+        }
+
+        tokio::time::sleep(CLEANUP_INTERVAL).await;
+    }
 }
 
 async fn add_reading(
@@ -162,16 +261,177 @@ async fn add_reading(
     .await;
 
     match result {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "status": "success" })),
-        ),
+        Ok(_) => {
+            // Evaluate the alert state off the request path so the sensor
+            // client gets its acknowledgement without waiting on Apple.
+            if let Some(push) = state.push.clone() {
+                let pool = state.pool.clone();
+                let reading = payload;
+                tokio::spawn(async move {
+                    match alert::evaluate_and_store(&pool, &reading).await {
+                        Ok(Some(alert)) => {
+                            if let Err(error) = push::send_to_all(&pool, &push, &alert).await {
+                                tracing::error!(%error, "failed to deliver an air alert");
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            tracing::error!(%error, "failed to evaluate the air alert state");
+                        }
+                    }
+                });
+            }
+
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "status": "success" })),
+            )
+        }
         Err(e) => {
             eprintln!("Database error: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({ "status": "error", "message": e.to_string() })),
             )
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PushSubscriptionBody {
+    endpoint: String,
+    keys: PushSubscriptionKeys,
+}
+
+#[derive(Debug, Deserialize)]
+struct PushSubscriptionKeys {
+    p256dh: String,
+    auth: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UnsubscribeBody {
+    endpoint: String,
+}
+
+/// The browser needs the public half of the VAPID key to subscribe.
+async fn push_key(State(state): State<AppState>) -> impl IntoResponse {
+    match state.push.as_ref() {
+        Some(push) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "publicKey": push.public_key })),
+        )
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "push notifications are not configured"
+            })),
+        )
+            .into_response(),
+    }
+}
+
+async fn subscribe_push(
+    State(state): State<AppState>,
+    Json(body): Json<PushSubscriptionBody>,
+) -> impl IntoResponse {
+    if state.push.is_none() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "push notifications are not configured"
+            })),
+        )
+            .into_response();
+    }
+
+    if let Err(error) =
+        push::validate_subscription(&body.endpoint, &body.keys.p256dh, &body.keys.auth)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": error.to_string()
+            })),
+        )
+            .into_response();
+    }
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO push_subscriptions (endpoint, p256dh, auth, last_seen_at)
+        VALUES ($1, $2, $3, now())
+        ON CONFLICT (endpoint) DO UPDATE
+        SET p256dh = EXCLUDED.p256dh,
+            auth = EXCLUDED.auth,
+            last_seen_at = now()
+        "#,
+    )
+    .bind(&body.endpoint)
+    .bind(&body.keys.p256dh)
+    .bind(&body.keys.auth)
+    .execute(&state.pool)
+    .await;
+
+    match result {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "subscribed" })),
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!(%error, "failed to store a push subscription");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "message": "could not store the subscription"
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn unsubscribe_push(
+    State(state): State<AppState>,
+    Json(body): Json<UnsubscribeBody>,
+) -> impl IntoResponse {
+    if body.endpoint.is_empty() || body.endpoint.len() > 2048 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "invalid push endpoint"
+            })),
+        )
+            .into_response();
+    }
+
+    match sqlx::query("DELETE FROM push_subscriptions WHERE endpoint = $1")
+        .bind(&body.endpoint)
+        .execute(&state.pool)
+        .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "unsubscribed" })),
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!(%error, "failed to delete a push subscription");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "message": "could not remove the subscription"
+                })),
+            )
+                .into_response()
         }
     }
 }
@@ -212,6 +472,16 @@ async fn get_readings(State(state): State<AppState>) -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retention_days_defaults_and_rejects_invalid_values() {
+        assert_eq!(parse_retention_days(None), DEFAULT_RETENTION_DAYS);
+        assert_eq!(parse_retention_days(Some("")), DEFAULT_RETENTION_DAYS);
+        assert_eq!(parse_retention_days(Some(" 14 ")), 14);
+        assert_eq!(parse_retention_days(Some("0")), RETENTION_DISABLED);
+        assert_eq!(parse_retention_days(Some("-1")), DEFAULT_RETENTION_DAYS);
+        assert_eq!(parse_retention_days(Some("seven")), DEFAULT_RETENTION_DAYS);
+    }
 
     #[test]
     fn read_rate_limiter_allows_burst_then_rejects() {

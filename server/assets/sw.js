@@ -6,7 +6,7 @@
  */
 'use strict';
 
-const VERSION = 'v1';
+const VERSION = 'v4';
 const SHELL_CACHE = 'm701-shell-' + VERSION;
 const DATA_CACHE = 'm701-data-' + VERSION;
 
@@ -14,7 +14,7 @@ const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/script.js?v=db29a479',
+  '/script.js?v=9d3e7a10',
   '/chart.umd.min.js?v=1',
   '/fonts/gabarito-latin.woff2',
   '/fonts/gabarito-latin-ext.woff2',
@@ -60,6 +60,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Never serve a stale VAPID key; a subscription created with the old key
+  // would fail to decrypt.
+  if (url.pathname === '/api/push/key') {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   if (url.pathname === '/api/readings') {
     event.respondWith(readingsResponse(request));
@@ -107,6 +114,44 @@ async function pageResponse(request) {
     return (await cache.match('/index.html')) || (await cache.match('/')) || Response.error();
   }
 }
+
+/* Air-quality alerts arrive from the server. The page does not need to be
+ * open: iOS wakes the worker for the event and `showNotification` displays it
+ * with the app icon and name from the manifest. */
+self.addEventListener('push', (event) => {
+  let alert = {};
+  try {
+    alert = event.data ? event.data.json() : {};
+  } catch (_) { /* fall back to the generic copy below */ }
+
+  const title = typeof alert.title === 'string' && alert.title ? alert.title : 'Air quality alert';
+  const body = typeof alert.body === 'string' ? alert.body : 'Open the dashboard for the latest reading.';
+  const url = typeof alert.url === 'string' && alert.url.startsWith('/') ? alert.url : '/';
+
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: 'm701-air',
+    data: { url },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const open = windows.find((client) => client.url === target) || windows[0];
+    if (open) {
+      await open.focus();
+      return;
+    }
+    await self.clients.openWindow(target);
+  })());
+});
 
 /* Fonts, icons, scripts, and styles change rarely: serve the copy we have and
  * refresh it in the background. */

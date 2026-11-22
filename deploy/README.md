@@ -22,6 +22,8 @@ cp .env.example .env
 chmod 600 .env
 openssl rand -hex 32   # put this in SENSOR_API_KEY
 openssl rand -hex 24   # put this in POSTGRES_PASSWORD
+# optional browser alerts: pnpm vapid:keys, then set VAPID_PRIVATE_KEY and
+# VAPID_SUBJECT in .env
 docker compose up -d --build
 docker compose ps
 ```

@@ -21,6 +21,10 @@ The server is configured via environment variables. You can set these in a `.env
 | `PORT` | The port to listen on | `3000` |
 | `SENSOR_API_KEY` | **Required** for `POST` requests. The shared secret with the client. | *None* |
 | `DATABASE_URL` | PostgreSQL connection string | *None* |
+| `RETENTION_DAYS` | Days of readings to keep; cleanup runs hourly, `0` disables it | `7` |
+| `VAPID_PRIVATE_KEY` | URL-safe base64 P-256 private key for Web Push alerts; empty disables alerts | *None* |
+| `VAPID_SUBJECT` | VAPID contact, `mailto:...` or `https://...`; required with the private key | *None* |
+| `VAPID_PUBLIC_KEY` | Optional; only used to verify it matches the private key | *Derived* |
 | `POSTGRES_USER` | PostgreSQL username (Docker only) | `sensor_user` |
 | `POSTGRES_PASSWORD` | PostgreSQL password (Docker only) | *None* |
 | `POSTGRES_DB` | PostgreSQL database name (Docker only) | `sensor_data` |
@@ -67,6 +71,144 @@ counted; it remains protected by the API key.
     ...
   }
 ]
+```
+
+### `GET /api/push/key`
+
+Public. Returns the VAPID public key the dashboard needs before it can create a
+push subscription:
+
+```json
+{ "publicKey": "B..." }
+```
+
+Returns `503` when `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` are not configured.
+
+### `POST /api/push/subscribe`
+
+Public. Stores a browser `PushSubscription`. The body is the object returned by
+`subscription.toJSON()`, so `expirationTime` is ignored:
+
+```json
+{
+  "endpoint": "https://web.push.apple.com/...",
+  "keys": { "p256dh": "B...", "auth": "..." }
+}
+```
+
+Endpoints are restricted to the well-known Apple, Google, Mozilla, and Microsoft
+push services because the server POSTs to them. Dead subscriptions (`404`/`410`)
+are deleted automatically.
+
+### `DELETE /api/push/subscribe`
+
+Public. Removes a subscription by endpoint:
+
+```json
+{ "endpoint": "https://web.push.apple.com/..." }
+```
+
+## Data Retention
+
+The server deletes readings older than `RETENTION_DAYS` (default **7**) once at
+startup and then hourly. Deletes compare against UTC wall-clock time and use the
+index from `migrations/*_add_readings_timestamp_index.sql`, so they stay cheap as
+the table grows. Set `RETENTION_DAYS=0` to keep readings indefinitely.
+
+Each run logs the number of pruned rows; a no-op run only logs at debug level.
+If several server instances share the database, they can all run the task — the
+delete is idempotent.
+
+## Air Quality Alerts
+
+The server can send a browser push notification when the air stays poor. It
+uses standard Web Push with VAPID; no Apple developer account or APNs
+certificate is involved.
+
+The dashboard opens the "Alerts" button only when the browser supports Web Push
+and `/api/push/key` is configured. On iOS this means the PWA must be installed
+on the Home Screen (iOS 16.4+). The permission prompt appears only after a tap.
+
+### Thresholds and pacing
+
+A reading is "bad" when any air channel crosses its dashboard band:
+
+| Channel | Bad at |
+| :--- | ---: |
+| CO₂ | ≥ 1200 ppm |
+| PM2.5 | ≥ 35 µg/m³ |
+| PM10 | ≥ 100 µg/m³ |
+| TVOC | ≥ 600 µg/m³ |
+| HCHO | ≥ 150 µg/m³ |
+
+To avoid a notification every second:
+
+- Air must stay bad for **30 seconds** before the first alert.
+- The same episode notifies **once**; a new episode is suppressed for **1 hour**
+  after the previous notification.
+- Air must be good for **2 minutes** to end the episode. Recovery is silent.
+
+The state lives in the `alert_state` table, so a restart does not re-alert the
+same episode.
+
+### Setup
+
+1. Generate a VAPID pair (URL-safe base64, no padding):
+
+   ```bash
+   pnpm vapid:keys
+   ```
+
+2. Put the private key and a contact in `server/.env`:
+
+   ```bash
+   VAPID_PRIVATE_KEY=...
+   VAPID_SUBJECT=mailto:you@example.com
+   ```
+
+   `VAPID_PUBLIC_KEY` is optional. The server derives the public key from the
+   private key and serves it at `GET /api/push/key`.
+
+3. Apply the migration and restart:
+
+   ```bash
+   pnpm migrate
+   pnpm dev:server
+   ```
+
+4. Open the installed PWA, tap **Alerts**, and allow notifications.
+
+The service worker handles `push` and opens or focuses `/` when the
+notification is tapped. Every push must display a notification; iOS does not
+support silent data pushes.
+
+### Testing
+
+The alert is sent only after 30 seconds of sustained bad readings, so pause the
+sensor client first; otherwise its next good reading resets the timer. Then post
+a high reading every two seconds for about 35 seconds:
+
+```bash
+systemctl --user stop sensor-client
+
+for _ in $(seq 1 18); do
+  curl -sS -X POST http://127.0.0.1:3000/api/readings \
+    -H "x-api-key: $SENSOR_API_KEY" \
+    -H 'content-type: application/json' \
+    -d '{"eco2":1350,"ech2o":10,"tvoc":50,"pm2_5":5,"pm10":5,"temperature":22,"humidity":45}' \
+    >/dev/null
+  sleep 2
+done
+
+systemctl --user start sensor-client
+```
+
+The notification should arrive during the loop. To test again immediately,
+reset the episode and cooldown:
+
+```sql
+UPDATE alert_state
+SET level = 'clear', bad_since = NULL, clear_since = NULL, last_notified_at = NULL;
 ```
 
 ## Database Migrations

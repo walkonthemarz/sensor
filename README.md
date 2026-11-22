@@ -73,6 +73,18 @@ the Compose stack is ready to replace it when Docker access is granted.
 | :--- | :--- | :--- |
 | `GET` | `/api/readings` | public, latest 100 rows |
 | `POST` | `/api/readings` | `x-api-key` header |
+| `GET` | `/api/push/key` | public, VAPID public key |
+| `POST` | `/api/push/subscribe` | public, stores a push subscription |
+| `DELETE` | `/api/push/subscribe` | public, removes a push subscription |
+
+Readings older than `RETENTION_DAYS` (default 7) are pruned hourly; set
+`RETENTION_DAYS=0` on the server to disable cleanup.
+
+Air-quality alerts are optional Web Push notifications. Generate a VAPID pair
+with `pnpm vapid:keys`, set `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in
+`server/.env`, run `pnpm migrate`, then tap **Alerts** in the installed PWA.
+See [server/README.md](server/README.md#air-quality-alerts) for thresholds and
+iOS requirements.
 
 The client posts a 17-byte M701 frame decoded into:
 
