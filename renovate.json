@@ -1,6 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "timezone": "Asia/Shanghai",
   "lockFileMaintenance": {
     "enabled": true
@@ -8,9 +10,15 @@
   "packageRules": [
     {
       "description": "Group routine upgrades. 0.x bumps can be breaking in Cargo, so Renovate leaves those as individual PRs.",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "matchCurrentVersion": ">=1.0.0",
       "groupName": "non-major dependencies"
     }
-  ]
+  ],
+  "prHourlyLimit": 0
 }
