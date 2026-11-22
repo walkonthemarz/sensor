@@ -181,25 +181,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("RETENTION_DAYS=0; automatic reading cleanup is disabled");
     }
 
-    // Static assets are revalidated on every load so a stale dashboard script
-    // can never outlive a deploy.
-    let assets = ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::if_not_present(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("no-cache"),
-        ))
-        .service(ServeDir::new("assets"));
-
-    // Router
-    let app = Router::new()
-        .route("/api/readings", post(add_reading).get(get_readings))
-        .route("/api/push/key", get(push_key))
-        .route(
-            "/api/push/subscribe",
-            post(subscribe_push).delete(unsubscribe_push),
-        )
-        .nest_service("/", assets)
-        .with_state(state);
+    let app = router(state);
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
@@ -212,6 +194,29 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Build the HTTP router. Static assets are revalidated on every load so a
+/// stale dashboard script can never outlive a deploy.
+fn router(state: AppState) -> Router {
+    let assets = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
+        .service(ServeDir::new("assets"));
+
+    Router::new()
+        .route("/api/readings", post(add_reading).get(get_readings))
+        .route("/api/push/key", get(push_key))
+        .route(
+            "/api/push/subscribe",
+            post(subscribe_push).delete(unsubscribe_push),
+        )
+        // Axum 0.8 removed nesting at the root; use the static files as the
+        // fallback for anything the API routes did not match.
+        .fallback_service(assets)
+        .with_state(state)
 }
 
 /// Parse `RETENTION_DAYS`, falling back to the default for missing or invalid
@@ -580,5 +585,18 @@ mod tests {
         let reading: Reading = serde_json::from_str(json).expect("the client payload should parse");
         assert!(reading.timestamp.is_none());
         assert_eq!(reading.eco2, 400);
+    }
+
+    #[tokio::test]
+    async fn router_builds_with_the_static_fallback() {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://sensor_user@127.0.0.1:1/sensor_data")
+            .expect("the lazy pool should build");
+
+        let _ = router(AppState {
+            pool,
+            read_limiter: Arc::new(Mutex::new(RateLimiter::new())),
+            push: None,
+        });
     }
 }
