@@ -71,9 +71,17 @@ fn parse_frame(buffer: &[u8]) -> Option<SensorData> {
     let pm2_5 = u16::from_be_bytes([buffer[8], buffer[9]]);
     let pm10 = u16::from_be_bytes([buffer[10], buffer[11]]);
 
-    let temp_int = buffer[12];
-    let temp_dec = buffer[13];
-    let temperature = temp_int as f32 + (temp_dec as f32 / 10.0);
+    // B13 bit 7 is the sign bit (1 = negative) and the low 7 bits are the whole
+    // degrees; B14 holds tenths of a degree. Per the datasheet 0x9B / 0x05 is
+    // -27.5 C, so masking off the sign bit is required for sub-zero readings.
+    let negative = buffer[12] & 0x80 != 0;
+    let whole = (buffer[12] & 0x7F) as f32;
+    let fraction = buffer[13] as f32 / 10.0;
+    let temperature = if negative {
+        -(whole + fraction)
+    } else {
+        whole + fraction
+    };
 
     let hum_int = buffer[14];
     let hum_dec = buffer[15];
@@ -222,5 +230,43 @@ mod tests {
         assert_eq!(sensor_data.pm10, 30);
         assert_eq!(sensor_data.temperature, 25.5);
         assert_eq!(sensor_data.humidity, 50.2);
+    }
+
+    #[test]
+    fn test_parse_frame_negative_temperature() {
+        let mut data = vec![
+            0x3C, 0x02, // Header
+            0x01, 0x90, // eCO2 = 400
+            0x00, 0x05, // eCH2O = 5
+            0x00, 0x0A, // TVOC = 10
+            0x00, 0x14, // PM2.5 = 20
+            0x00, 0x1E, // PM10 = 30
+            0x9B, 5, // Temp = -27.5 (bit 7 set, 27 whole degrees)
+            50, 2, // Hum = 50.2
+        ];
+        let checksum = calculate_checksum(&data);
+        data.push(checksum);
+
+        let sensor_data = parse_frame(&data).expect("frame should parse");
+        assert_eq!(sensor_data.temperature, -27.5);
+    }
+
+    #[test]
+    fn test_parse_frame_negative_temperature_without_fraction() {
+        let mut data = vec![
+            0x3C, 0x02, // Header
+            0x01, 0x90, // eCO2 = 400
+            0x00, 0x05, // eCH2O = 5
+            0x00, 0x0A, // TVOC = 10
+            0x00, 0x14, // PM2.5 = 20
+            0x00, 0x1E, // PM10 = 30
+            0x83, 0, // Temp = -3.0 (bit 7 set, 3 whole degrees)
+            50, 2, // Hum = 50.2
+        ];
+        let checksum = calculate_checksum(&data);
+        data.push(checksum);
+
+        let sensor_data = parse_frame(&data).expect("frame should parse");
+        assert_eq!(sensor_data.temperature, -3.0);
     }
 }
