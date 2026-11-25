@@ -2,7 +2,7 @@
   "name": "sensor",
   "private": true,
   "description": "M701 indoor air quality monitor: Rust serial client, Axum/PostgreSQL API, static dashboard",
-  "packageManager": "pnpm@12.21.0",
+  "packageManager": "pnpm@12.23.0",
   "engines": {
     "node": ">=20"
   },
