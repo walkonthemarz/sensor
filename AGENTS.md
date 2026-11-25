@@ -89,9 +89,11 @@ already `cd` into `server/`.
 ### Build artifacts live at the workspace root
 
 `cargo` resolves the workspace root, so release binaries land in
-`target/release/` at the repository root, not `server/target/`. The systemd
-units under `deploy/systemd/` expect `~/sensor/target/release/{sensor_server,sensor_reader}`.
-Keep that path stable.
+`target/release/` at the repository root, not `server/target/`. The client unit
+under `deploy/systemd/` expects `~/sensor/target/release/sensor_reader`; the
+server unit expects `~/bin/sensor_server`, copied out of `target/release/` so
+the build directory can be deleted on the production host. Keep those paths
+stable.
 
 ### Migrations
 
