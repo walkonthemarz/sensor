@@ -6,7 +6,7 @@
  */
 'use strict';
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL_CACHE = 'm701-shell-' + VERSION;
 const DATA_CACHE = 'm701-data-' + VERSION;
 
@@ -14,7 +14,7 @@ const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/script.js?v=7887c495',
+  '/script.js?v=29082417',
   '/chart.umd.min.js?v=1',
   '/fonts/gabarito-latin.woff2',
   '/fonts/gabarito-latin-ext.woff2',

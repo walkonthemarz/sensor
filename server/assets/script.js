@@ -137,10 +137,20 @@
   const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
   const pad = (n) => String(n).padStart(2, '0');
 
-  // Times are stored and served as UTC; the dashboard always renders them in the
-  // household timezone instead of the viewer's device locale, so a phone set to
-  // UTC does not show readings 8 hours off.
-  const TIME_ZONE = 'Asia/Shanghai';
+  // Times are stored and served as UTC. Render them in the viewer's device zone
+  // when the browser reports one, and fall back to the household default so a
+  // browser that cannot tell still shows Shanghai time.
+  const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
+
+  function viewerTimeZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIME_ZONE;
+    } catch (_) {
+      return DEFAULT_TIME_ZONE;
+    }
+  }
+
+  const TIME_ZONE = viewerTimeZone();
   const timeZoneFormat = new Intl.DateTimeFormat('en-GB', {
     timeZone: TIME_ZONE,
     hourCycle: 'h23',

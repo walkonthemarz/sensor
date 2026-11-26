@@ -76,9 +76,9 @@ The server loads that file through `EnvironmentFile=` in
 ## Time
 
 Postgres stores UTC. The API returns naive UTC timestamps with no offset. The
-dashboard appends `Z` and renders every time in **`Asia/Shanghai`**
-(`TIME_ZONE` in `server/assets/script.js`) instead of the viewer's device
-locale, so a phone set to UTC still shows household time.
+dashboard appends `Z` and renders times in the viewer's device timezone,
+falling back to **`Asia/Shanghai`** (`DEFAULT_TIME_ZONE` in
+`server/assets/script.js`) when the browser does not report one.
 
 Ingestion does not depend on the database session timezone: it writes
 `now() AT TIME ZONE 'UTC'` explicitly and the column default is
