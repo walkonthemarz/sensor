@@ -13,6 +13,18 @@ The live box currently uses the rootless fallback in [rootless/](rootless/README
 because the deploy user cannot access the Docker socket without sudo. The Compose
 stack below is the preferred path once Docker access is granted.
 
+## Shipping a new API binary
+
+The server runs `~/bin/sensor_server`. It does not keep a cargo build tree:
+build on a workstation, then copy the release binary over and restart the unit
+(`deploy/systemd/sensor-server.service`).
+[`.agents/skills/deploy-to-server/`](../.agents/skills/deploy-to-server/SKILL.md)
+has a script that does this with a glibc check, an atomic swap, a health check
+and automatic rollback.
+
+Host names, addresses and user names stay out of this repository — it is public.
+Pass them at call time (`DEPLOY_HOST=...`) or keep them in `~/.ssh/config`.
+
 ## 1. Server
 
 ```bash

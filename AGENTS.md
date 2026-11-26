@@ -179,6 +179,12 @@ target; the live box currently uses the no-sudo systemd setup in
 `deploy/rootless/`. Read `server/DEPLOYMENT.md` and `deploy/README.md` before
 changing units, ports, or proxy config.
 
+The server runs `~/bin/sensor_server`; it keeps no cargo build tree. Ship a new
+binary by building on a workstation and copying it over —
+`.agents/skills/deploy-to-server/SKILL.md` documents the guard rails (glibc
+check, atomic swap, health check, rollback). Never run `cargo build` on the
+server.
+
 ### Secrets
 
 `.env`, TLS material, and certificates are gitignored. Never commit real keys.
