@@ -6,6 +6,7 @@ Wants=sensor-postgres.service
 [Service]
 Type=simple
 WorkingDirectory=%h/sensor/server
+Environment=TZ=Asia/Shanghai
 EnvironmentFile=%h/sensor/server/.env
 ExecStart=%h/bin/sensor_server
 Restart=always

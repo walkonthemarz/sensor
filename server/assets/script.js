@@ -137,6 +137,36 @@
   const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
   const pad = (n) => String(n).padStart(2, '0');
 
+  // Times are stored and served as UTC; the dashboard always renders them in the
+  // household timezone instead of the viewer's device locale, so a phone set to
+  // UTC does not show readings 8 hours off.
+  const TIME_ZONE = 'Asia/Shanghai';
+  const timeZoneFormat = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIME_ZONE,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const zoneCache = new Map();
+
+  function zoned(date) {
+    const key = date.getTime();
+    let parts = zoneCache.get(key);
+    if (!parts) {
+      parts = {};
+      for (const part of timeZoneFormat.formatToParts(date)) {
+        if (part.type !== 'literal') parts[part.type] = part.value;
+      }
+      if (zoneCache.size > 600) zoneCache.clear();
+      zoneCache.set(key, parts);
+    }
+    return parts;
+  }
+
   /* ---------- formatting ---------- */
 
   function loadRange() {
@@ -162,15 +192,18 @@
   }
 
   function timeHMS(date) {
-    return [pad(date.getHours()), pad(date.getMinutes()), pad(date.getSeconds())].join(':');
+    const parts = zoned(date);
+    return parts.hour + ':' + parts.minute + ':' + parts.second;
   }
 
   function timeHM(date) {
-    return [pad(date.getHours()), pad(date.getMinutes())].join(':');
+    const parts = zoned(date);
+    return parts.hour + ':' + parts.minute;
   }
 
   function dateHMS(date) {
-    return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + timeHMS(date);
+    const parts = zoned(date);
+    return parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute + ':' + parts.second;
   }
 
   function tickFormat(value) {
@@ -1107,11 +1140,7 @@
   }
 
   function init() {
-    try {
-      el.tzLabel.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time';
-    } catch (_) {
-      el.tzLabel.textContent = 'local time';
-    }
+    el.tzLabel.textContent = TIME_ZONE;
     syncRangeButtons();
     bindEvents();
     bindInstall();

@@ -299,10 +299,13 @@ async fn add_reading(
         );
     }
 
+    // `timestamp` is naive UTC, so write UTC wall-clock time explicitly instead
+    // of relying on `CURRENT_TIMESTAMP`, which is a timestamptz cast through the
+    // session timezone and would store local time on a non-UTC database.
     let result = sqlx::query(
         r#"
-        INSERT INTO readings (eco2, ech2o, tvoc, pm2_5, pm10, temperature, humidity)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO readings (timestamp, eco2, ech2o, tvoc, pm2_5, pm10, temperature, humidity)
+        VALUES ((now() AT TIME ZONE 'UTC'), $1, $2, $3, $4, $5, $6, $7)
         "#,
     )
     .bind(payload.eco2)

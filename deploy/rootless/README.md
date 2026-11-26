@@ -75,11 +75,27 @@ The server loads that file through `EnvironmentFile=` in
 
 ## Time
 
-Postgres stores UTC. The API returns naive UTC timestamps; the dashboard appends
-`Z` and renders them in the viewer's timezone. Keep the database and role at UTC
-so all rows, the API, and the dashboard agree:
+Postgres stores UTC. The API returns naive UTC timestamps with no offset. The
+dashboard appends `Z` and renders every time in **`Asia/Shanghai`**
+(`TIME_ZONE` in `server/assets/script.js`) instead of the viewer's device
+locale, so a phone set to UTC still shows household time.
+
+Ingestion does not depend on the database session timezone: it writes
+`now() AT TIME ZONE 'UTC'` explicitly and the column default is
+`CURRENT_TIMESTAMP AT TIME ZONE 'UTC'`. The deployment's default timezone is
+`Asia/Shanghai` (`TZ` on the systemd units and containers, plus the database
+and role below), which only affects how values look in `psql` and in the logs:
 
 ```sql
-ALTER DATABASE sensor_data SET timezone TO 'UTC';
-ALTER ROLE sensor_user SET timezone TO 'UTC';
+ALTER DATABASE sensor_data SET timezone TO 'Asia/Shanghai';
+ALTER ROLE sensor_user SET timezone TO 'Asia/Shanghai';
+```
+
+Rows written before that fix on a non-UTC host hold local wall-clock time and
+read 8 h off in `Asia/Shanghai`. Repair them once with:
+
+```sql
+SET TimeZone = 'Asia/Shanghai';  -- the zone the rows were written in
+UPDATE readings
+SET timestamp = (timestamp AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE 'UTC';
 ```

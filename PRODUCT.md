@@ -36,7 +36,7 @@ The dashboard lives at `https://sensor.boxcube.xyz`, served by the Axum server f
   - temperature °C (comfort 20–26)
   - humidity %RH (comfort 40–60)
 - One overall verdict, per-channel level flags, 24-point sparklines, three history charts (20/50/100 points), and a recent-readings table.
-- API timestamps are naive UTC and localized in the browser.
+- API timestamps are naive UTC and rendered in `Asia/Shanghai` on the dashboard.
 - Must keep the existing API contract and all working controls: refresh, range selection, URL/localStorage range state, visibility refresh, online retry, and accessible labels.
 - Accessibility: keyboard focus, skip link, live/offline status text, `prefers-reduced-motion`, table semantics, and chart text alternatives.
 

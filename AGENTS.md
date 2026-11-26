@@ -139,7 +139,13 @@ good air to clear. State lives in `alert_state`; subscriptions live in
 - `GET /api/readings` is public and returns the latest 100 rows, globally rate
   limited to 120 requests/minute with `429` + `Retry-After` when exhausted.
 - Timestamps are stored and returned as **naive UTC**; the dashboard appends
-  `Z` and localizes in the browser. Keep that behavior consistent.
+  `Z` and renders them in `Asia/Shanghai` (`TIME_ZONE` in
+  `server/assets/script.js`) rather than the viewer's device locale. Keep that
+  behavior consistent.
+- Ingestion writes `now() AT TIME ZONE 'UTC'` explicitly and the column default
+  is `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'`. Never reintroduce a bare
+  `CURRENT_TIMESTAMP`/`now()` default: it is a `timestamptz` cast through the
+  session timezone, which silently stored local time on a non-UTC host.
 - The client posts `application/json`; keep field names and units unchanged.
 
 ### Dashboard assets (PWA)
